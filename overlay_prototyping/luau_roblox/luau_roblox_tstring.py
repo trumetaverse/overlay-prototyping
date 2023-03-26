@@ -55,7 +55,7 @@ class LuauRobloxTstring(BaseOverlay):
     @classmethod
     def from_bytes(cls, addr, nbytes, analysis=None, is_32bit=False):
         kargs = { "addr":addr, "updated":False, 'jvm_analysis':analysis,
-                  "type":"TString", 'is_32bit': is_32bit}
+                  "type":cls._name, 'is_32bit': is_32bit}
         fmt = cls.bits32
         sz = cls.struct_size(is_32bit)
         data_unpack = struct.unpack(fmt, nbytes[:sz])
@@ -80,3 +80,7 @@ class LuauRobloxTstring(BaseOverlay):
         tstring = cls.from_bytes(addr, nbytes, analysis, is_32bit=is_32bit)
         setattr(tstring, 'raw_bytes', nbytes)
         return tstring
+
+    @classmethod
+    def check_gc_header(cls, nbytes):
+        gc_header
