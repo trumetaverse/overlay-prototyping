@@ -189,16 +189,20 @@ class MemRanges(object):
         addr = vaddr & self.page_size
         return addr in self.vmem_page_lookup
 
+
+    def get_page(self, addr: int):
+        return self.page_mask & addr
+
     def get_memrange_from_vaddr(self, vaddr: int) -> MemRange:
-        addr = vaddr & self.page_size
-        if addr in self.vmem_page_lookup:
-            return self.vmem_page_lookup[addr]
+        page = self.get_page(vaddr)
+        if page in self.vmem_page_lookup:
+            return self.vmem_page_lookup[page]
         return None
 
     def get_memrange_from_paddr(self, paddr: int) -> MemRange:
-        addr = paddr & self.page_size
-        if addr in self.phy_page_lookup:
-            return self.phy_page_lookup[addr]
+        page = self.get_page(paddr)
+        if page in self.phy_page_lookup:
+            return self.phy_page_lookup[page]
         return None
 
     def convert_paddr_to_vaddr(self, paddr: int) -> int:

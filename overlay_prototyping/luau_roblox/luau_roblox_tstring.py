@@ -1,10 +1,11 @@
 
 from ..base import *
+from luau_roblox_base import LuauRobloxBase
 from luau_roblox_overlay import LUAUR_TSTRING
 import struct
 
 
-class LuauRobloxTstring(BaseOverlay):
+class LuauRobloxTstring(LuauRobloxBase):
     _name = "TString"
     _overlay = LUAUR_TSTRING
     bits32 = get_bits32(_overlay)
@@ -14,6 +15,7 @@ class LuauRobloxTstring(BaseOverlay):
     size32 = get_size32(_overlay)
     size64 = get_size64(_overlay)
     types = get_field_types(_overlay)
+    _TYPE = 0x05
 
     def __init__(self, **kargs):
         for k,v in kargs.items():
@@ -54,6 +56,8 @@ class LuauRobloxTstring(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, nbytes, analysis=None, is_32bit=False):
+        if not LuauRobloxBase.check_gc_header(nbytes):
+            return None
         kargs = { "addr":addr, "updated":False, 'jvm_analysis':analysis,
                   "type":cls._name, 'is_32bit': is_32bit}
         fmt = cls.bits32
@@ -81,6 +85,3 @@ class LuauRobloxTstring(BaseOverlay):
         setattr(tstring, 'raw_bytes', nbytes)
         return tstring
 
-    @classmethod
-    def check_gc_header(cls, nbytes):
-        gc_header
