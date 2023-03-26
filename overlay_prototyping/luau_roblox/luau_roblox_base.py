@@ -1,7 +1,8 @@
-from ..base import *
-from luau_roblox_overlay import LUAUR_GCHEADER, TYPES, VALID_MARKS
+from .. base import *
+from .luau_roblox_overlay import LUAUR_GCHEADER, TYPES, VALID_MARKS
 import struct
 
+int_to_bytes = lambda x: struct.pack(">I", d)
 
 class LuauRobloxBase(BaseOverlay):
     _name = "GCHeader"
@@ -78,7 +79,14 @@ class LuauRobloxBase(BaseOverlay):
 
     @classmethod
     def check_gc_header(cls, nbytes):
-        v = LuauRobloxBase.from_bytes(nbytes)
-        if v.tt in TYPES and v.marked in VALID_MARKS:
-            return True
-        return False
+        v = LuauRobloxBase.from_bytes(0, nbytes)
+        return v.is_valid_gc_header()
+
+    def is_valid_gc_header(self):
+        return self.tt in TYPES and self.marked in VALID_MARKS
+
+    @classmethod
+    def from_int(cls, addr, value, analysis=None, is_32bit=True):
+        nbytes = struct.pack(">I", value)
+        return cls.from_bytes(addr, nbytes, analysis=analysis, is_32bit=is_32bit)
+

@@ -1,4 +1,5 @@
 import json
+from .luau_roblox_base import LuauRobloxBase
 
 LUAR_FILTERS = {
     "addr_is_lua_object": lambda lsr: lsr.sink_vaddr % 8 == 0,
@@ -10,9 +11,11 @@ class LuauSifterResults(object):
         self.srcs = {}
         self.pot_objects = {}
         self.distinct_values = {}
+        self.potential_gcheaders = {}
 
     def add_sifter_result(self, r):
-        if not r.sink_vaddr in self.pot_objects:
+
+        if not r.sink_vaddr in self.pot_objects and r.valid_gcheader():
             self.pot_objects[r.sink_vaddr] = r
 
         if r.sink_value not in self.distinct_values:
@@ -23,6 +26,7 @@ class LuauSifterResults(object):
             self.srcs[r.sink_vaddr] = []
 
         self.srcs[r.sink_vaddr].append({'vaddr': r.vaddr, 'paddr': r.paddr})
+
 
     def parse_line(self, line):
         r = LuauSifterResult.from_line(line)
@@ -51,6 +55,7 @@ class LuauSifterResult(object):
         self.sink_vaddr = 0
         self.sink_paddr = 0
         self.sink_value = 0
+        self.gcheader = None
         for k, v in kargs.items():
             if k in self.KEY_VALUES and v != "null":
                 setattr(self, k, int(v, 16))
@@ -58,6 +63,12 @@ class LuauSifterResult(object):
                 setattr(self, k, None)
             else:
                 setattr(self, k, v)
+
+        if isinstance(self.sink_value, int):
+            self.gcheader = LuauRobloxBase.from_int(self.sink_vaddr, self.sink_value)
+
+    def valid_gcheader(self):
+        return self.gcheader is not None and self.gcheader.is_valid_gc_header()
 
     @classmethod
     def from_line(cls, line):
