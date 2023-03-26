@@ -1,9 +1,10 @@
 import json
 
+
 class MemRange(object):
     def __init__(self, **kargs):
-        self.vaddr_start = 0
-        self.paddr_start = 0
+        self.vaddr = 0
+        self.paddr = 0
         self.vsize = 0
         self.size = 0
         self.data = None
@@ -12,34 +13,35 @@ class MemRange(object):
         self.backend = None
         self.filename = None
 
-        for k,v in kargs:
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def vaddr_in_range(self, vaddr):
-        return self.vaddr_start <= vaddr and vaddr < self.vaddr_start + self.vsize
+        return self.vaddr <= vaddr and vaddr < self.vaddr + self.vsize
 
     def paddr_in_range(self, paddr):
-        return self.paddr_start <= paddr and paddr < self.paddr_start + self.size
+        return self.paddr <= paddr and paddr < self.paddr + self.size
 
     def convert_paddr_to_vaddr(self, paddr):
         if not self.paddr_in_range(paddr):
             return None
-        return self.vaddr_start + (paddr - self.paddr_start)
+        return self.vaddr + (paddr - self.paddr)
 
     def convert_vaddr_to_paddr(self, vaddr):
         if not self.vaddr_in_range(vaddr):
             return None
-        return self.paddr_start + (vaddr - self.vaddr_start)
+        return self.paddr + (vaddr - self.vaddr)
 
     def set_data(self, data):
         self.data = data
+
     def load_memory_load_memory_range_bytes_from_file(self, fh):
-        fh.seek(self.paddr_start)
+        fh.seek(self.paddr)
         self.set_data(fh.read(self.vsize))
 
     def read_bytes(self, offset, sz):
         if self.data is not None:
-            return self.data[offset: offset+sz]
+            return self.data[offset: offset + sz]
         return None
 
     @classmethod
@@ -54,12 +56,12 @@ class MemRange(object):
 
     def convert_vaddr_to_offset(self, vaddr):
         if self.vaddr_in_range(vaddr):
-            return vaddr - self.vaddr_start
+            return vaddr - self.vaddr
         return None
 
     def convert_paddr_to_offset(self, paddr):
         if self.paddr_in_range(paddr):
-            return paddr - self.paddr_start
+            return paddr - self.paddr
         return None
 
     def read_at_vaddr(self, vaddr, sz=1):
@@ -79,43 +81,118 @@ class MemRange(object):
         fh = open(filename)
         fh.seek(offset)
         self.data = fh.read(self.size)
+        # pad the virtual data
+        if self.size < self.vsize:
+            d = b'\x00' * (self.vsize - self.size)
+            self.data = self.data + d
 
+    def __str__(self):
+        keys = ['name', 'size', 'vsize', 'perm', 'paddr', 'vaddr']
+        s = []
+        for k in keys:
+            if isinstance(self.__dict__.get(k, None), int):
+                s.append("{}: {:08x}".format(k, self.__dict__[k]))
+            else:
+                s.append("{}: {}".format(k, self.__dict__.get(k, None)))
+        return "[MemReange: " + " ".join(s) + "]"
+
+    def __repr__(self):
+        return str(self)
 
 
 class MemRanges(object):
     def __init__(self):
         self.vmem_ranges = {}
         self.pmem_ranges = {}
-        self.page_lookup = {}
+        self.mem_ranges = []
+        self.paddr_sorted_ranges = []
+        self.vmem_page_lookup = {}
         self.phy_page_lookup = {}
         self.page_mask = 0xfffffffffffff000
         self.page_size = 4096
         self.alignment = 4
         self.word_sz = 4
 
-    def count(self):
-        return len(self.vmem_ranges)
+    def paddr_range(self):
+        min_range = min([mr.paddr for mr in self.mem_ranges])
+        max_range = max([mr.paddr + mr.size for mr in self.mem_ranges])
+        return min_range, max_range
 
-    def add_mem_range(self, mem_range: MemRange):
-        vaddr_base = mem_range.vaddr_start
-        vaddr_end = mem_range.vaddr_start + mem_range.vsize
-        pages = {i:mem_range for i in range(vaddr_base, vaddr_end, self.page_size)}
-        self.page_lookup.update(pages)
-        paddr_base = mem_range.paddr_start
-        paddr_end = mem_range.paddr_start + mem_range.size
-        pages = {i:mem_range for i in range(paddr_base, paddr_end, self.page_size)}
-        self.phy_page_lookup.update(pages)
-        self.vmem_ranges[vaddr_base] = mem_range
-        self.pmem_ranges[paddr_base] = mem_range
+    def paddr_size(self):
+        sz = sum([mr.size for mr in self.mem_ranges])
+        return sz
+
+    def vaddr_size(self):
+        sz = sum([mr.vsize for mr in self.mem_ranges])
+        return sz
+
+    def vaddr_range(self):
+        min_range = min([mr.vaddr for mr in self.mem_ranges])
+        max_range = max([mr.vaddr + mr.vsize for mr in self.mem_ranges])
+        return min_range, max_range
+
+    def __str__(self):
+        pstart, pend = self.paddr_range()
+        vstart, vend = self.paddr_range()
+        vsize = self.vaddr_size()
+        size = self.paddr_size()
+        fmt = "[MemRanges: paddr_range: {:08x}-{:08x} ({:08x}) vaddr_range: {:08x}-{:08x} ({:08x}) num_entries:{:08x}]"
+        return fmt.format(pstart, pend, size, vstart, vsize, vsize, len(self.mem_ranges))
+
+    def __repr__(self):
+        self.sort_ranges()
+        s = str(self)
+        return s + "\n" + "\n\t".join([str(i) for i in self.mem_ranges])
+
+    def sort_ranges(self):
+        self.sort_ranges_by_vaddr()
+        self.sort_ranges_by_paddr()
+
+    def sort_ranges_by_vaddr(self):
+        results = sorted(self.mem_ranges, key=lambda mr: mr.vaddr)
+        self.mem_ranges = results
+        return results
+
+    def sort_ranges_by_paddr(self):
+        results = sorted(self.mem_ranges, key=lambda mr: mr.paddr)
+        self.paddr_sorted_ranges = results
+        return results
+
+    def __len__(self):
+        return len(self.mem_ranges)
+
+    def update_index(self):
+        self.sort_ranges()
+        self.phy_page_lookup = {}
+        self.vmem_page_lookup = {}
+        for mr in self.mem_ranges:
+            self.vmem_ranges[mr.vaddr] = mr
+            self.pmem_ranges[mr.paddr] = mr
+
+            vaddr_base = mr.vaddr
+            vaddr_end = mr.vaddr + mr.size
+            paddr_base = mr.paddr
+            paddr_end = mr.paddr + mr.size
+
+            for page in range(vaddr_base, vaddr_end, self.page_size):
+                self.vmem_page_lookup[page] = mr
+
+            for page in range(paddr_base, paddr_end, self.page_size):
+                self.phy_page_lookup[page] = mr
+
+    def add_mem_range(self, mem_range: MemRange, update_index = False):
+        self.mem_ranges.append(mem_range)
+        if update_index:
+            self.update_index()
 
     def valid_vaddr(self, vaddr: int) -> bool:
         addr = vaddr & self.page_size
-        return addr in self.page_lookup
+        return addr in self.vmem_page_lookup
 
     def get_memrange_from_vaddr(self, vaddr: int) -> MemRange:
         addr = vaddr & self.page_size
-        if addr in self.page_lookup:
-            return self.page_lookup[addr]
+        if addr in self.vmem_page_lookup:
+            return self.vmem_page_lookup[addr]
         return None
 
     def get_memrange_from_paddr(self, paddr: int) -> MemRange:
@@ -142,7 +219,6 @@ class MemRanges(object):
             mr.filename = filename
             mr.load_memory_load_memory_range_bytes_from_file(fh)
 
-
     @classmethod
     def load_from_radare_section_json(cls, filename: str = None, json_data: list = None):
         if json_data is None and filename is None:
@@ -157,6 +233,7 @@ class MemRanges(object):
                 if isinstance(e, dict):
                     mr = MemRange.from_json(e)
                     mem_ranges.add_mem_range(mr)
+            mem_ranges.update_index()
             return mem_ranges
         return None
 
@@ -173,7 +250,6 @@ class MemRanges(object):
         return None
 
 
-
 class Analysis(object):
     def __init__(self, dmp_file=None, radare_file_data=None, load_memory_data=False):
         self.mem_ranges = MemRanges()
@@ -185,6 +261,9 @@ class Analysis(object):
         if radare_file_data is not None:
             self.load_from_radare_section_json(radare_file_data)
 
+        if dmp_file is not None:
+            self.open_memory_file(dmp_file)
+
         if load_memory_data:
             self.load_memory()
 
@@ -193,8 +272,6 @@ class Analysis(object):
             raise Exception("Unable to load memory, no opened file")
 
         self.mem_ranges.load_memory_range_bytes_from_file(self.dmp_file)
-
-
 
     def open_memory_file(self, filename):
         self.memory_file = filename
@@ -229,7 +306,7 @@ class Analysis(object):
 
     def get_paddr_base_from_vaddr(self, vaddr: int):
         mr = self.mem_ranges.get_memrange_from_vaddr(vaddr)
-        return mr.paddr_start
+        return mr.paddr
 
     def get_vaddr_from_paddr(self, paddr: int):
         mr = self.mem_ranges.get_memrange_from_paddr(paddr)
@@ -237,7 +314,7 @@ class Analysis(object):
 
     def get_vaddr_base_from_paddr(self, paddr: int):
         mr = self.mem_ranges.get_memrange_from_paddr(paddr)
-        return mr.vaddr_start
+        return mr.vaddr
 
     def valid_vaddr(self, vaddr: int):
         return self.mem_ranges.get_memrange_from_vaddr(vaddr) is not None
