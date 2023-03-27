@@ -48,8 +48,8 @@ class Symbol(BaseOverlay):
         return str(getattr(self, 'jbyte'))
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis):
-        if jvm_analysis and jvm_analysis.has_internal_object(addr):
+    def from_bytes(cls, addr, _bytes, analysis):
+        if analysis and jvm_analysis.has_internal_object(addr):
             sym = jvm_analysis.lookup_internal_symbol_only(addr)
             if sym and sym._name != "Symbol":
                 raise BaseException("Symbol is not a symbol @ 0x%08x")
@@ -60,7 +60,7 @@ class Symbol(BaseOverlay):
             return None
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
         if jvm_analysis.is_32bit:
             name_fields(data_unpack, Symbol.named32, fields=kargs)
         else:
@@ -143,7 +143,7 @@ class SymbolTableEntry(BaseOverlay):
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
         name_fields(data_unpack, nfields, fields=kargs)
         _next = kargs['next']
         kargs['has_next'] = _next != 0 and \
@@ -224,7 +224,7 @@ class SymbolTableBucket(BaseOverlay):
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
         name_fields(data_unpack, nfields, fields=kargs)
 
         _entry = kargs["entry"]
@@ -286,7 +286,7 @@ class SymbolTable(BaseOverlay):
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
         name_fields(data_unpack, nfields, fields=kargs)
 
         kargs['bucket_values'] = None

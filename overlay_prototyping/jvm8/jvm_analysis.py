@@ -584,19 +584,19 @@ class JVMAnalysis(object):
     def __setstate__(self, _dict):
         self.__dict__.update(_dict)
         for v in self.all_klasses.values():
-            v.set_jvm_analysis(self)
+            v.set_analysis(self)
         for v in self.symboltable_values.values():
-            v.set_jvm_analysis(self)
+            v.set_analysis(self)
         for v in self.all_oops.values():
-            v.set_jvm_analysis(self)
+            v.set_analysis(self)
         for v in self.all_methods.values():
-            v.set_jvm_analysis(self)
+            v.set_analysis(self)
         for v in self.failed_klasses:
-            v.set_jvm_analysis(self)
+            v.set_analysis(self)
         for v in self.known_internals.values():
-            v.set_jvm_analysis(self)
+            v.set_analysis(self)
         for v in self.known_metas.values():
-            v.set_jvm_analysis(self)
+            v.set_analysis(self)
 
     def set_place_holders_addr(self):
         tsyms = self.get_symbol_by_field_name("_placeholders")

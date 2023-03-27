@@ -174,7 +174,7 @@ class Oop(BaseOverlay):
         return None
 
     def accumulate_values(self, to_lookup={}, bread_crumbs={}, found_values={}, set_bread_crumbs=False):
-        jva = getattr(self, 'jvm_analysis', None)
+        jva = getattr(self, 'analysis', None)
         # structure ==> {addr:{"klass:field":addr, ...}, ...}
         logit = False  # if str(self).find('java/util/Hashtable$Entry') == -1 else True
         klass_fld_values = getattr(self, 'oop_field_values_by_name', None)
@@ -221,7 +221,7 @@ class Oop(BaseOverlay):
 
     def update_values(self, bread_crumbs={}, found_values={}, updated={}):
         # structure ==> {addr:{"klass:field":addr, ...}, ...}
-        jva = getattr(self, 'jvm_analysis', None)
+        jva = getattr(self, 'analysis', None)
         klass_fld_values = getattr(self, 'oop_field_values_by_name', None)
         res = {}
         klasses = self.get_ordered_klass_dependencies()
@@ -443,7 +443,7 @@ class Oop(BaseOverlay):
     def agg_size(self):
         self.update_fields()
         sz = self.size()
-        jva = getattr(self, 'jvm_analysis', None)
+        jva = getattr(self, 'analysis', None)
         klass = getattr(self, 'klass_value', None)
         if klass:
             fld_sz_str = 'oop_nonstatic_field_size'
@@ -483,7 +483,7 @@ class Oop(BaseOverlay):
             return
         setattr(self, 'parse_flds_in_progress', True)
         try:
-            jva = getattr(self, "jvm_analysis")
+            jva = getattr(self, "analysis")
             klass = self.get_klass()
 
             if klass is None or type(klass) != KlassInstance or \
@@ -611,27 +611,27 @@ class Oop(BaseOverlay):
             delattr(self, 'parse_flds_in_progress')
 
     @classmethod
-    def get_metadata(cls, addr, _bytes, jvm_analysis):
-        jva = jvm_analysis
+    def get_metadata(cls, addr, _bytes, analysis):
+        jva = analysis
         if (addr % 8) != 0:
             return None
 
         fmt = cls.bits32 if jva.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
-        kargs = {"addr": addr, "jvm_analysis": jvm_analysis, "ooptype": "Oop",
+        nfields = cls.named32 if analysis.is_32bit else cls.named64
+        kargs = {"addr": addr, "analysis": analysis, "ooptype": "Oop",
                  "updated": False, "klasstype": "",
                  "klass_value": None}
         name_fields(data_unpack, nfields, fields=kargs)
         return kargs['metadata']
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis, save_oop=True):
-        jva = jvm_analysis
+    def from_bytes(cls, addr, _bytes, analysis, save_oop=True):
+        jva = analysis
         if (addr % 8) != 0:
             return None
-        if jvm_analysis and jvm_analysis.has_oop(addr):
-            oop = jvm_analysis.lookup_known_oop_only(addr)
+        if analysis and analysis.has_oop(addr):
+            oop = analysis.lookup_known_oop_only(addr)
             if oop and oop._name.find("Oop") == -1:
                 # print "Error, not oop ", oop, " ", type(oop)
                 raise BaseException("Oop is not a symbol @ 0x%08x" % (addr))
@@ -641,12 +641,12 @@ class Oop(BaseOverlay):
         if bytes is None:
             return None
 
-        fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
+        fmt = cls.bits32 if analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
-        kargs = {"addr": addr, "jvm_analysis": jvm_analysis, "ooptype": "Oop",
+        nfields = cls.named32 if analysis.is_32bit else cls.named64
+        kargs = {"addr": addr, "analysis": analysis, "ooptype": "Oop",
                  "updated": False, "klasstype": "",
-                 "klass_value": None, 'is_32bit': jvm_analysis.is_32bit}
+                 "klass_value": None, 'is_32bit': analysis.is_32bit}
         name_fields(data_unpack, nfields, fields=kargs)
 
         klass_info = get_klass_info(kargs['metadata'], jva)
@@ -677,8 +677,8 @@ class Oop(BaseOverlay):
         #    is_prim = True
 
         d = Oop(**kargs)
-        if jvm_analysis and d and save_oop:
-            jvm_analysis.add_oop(d)
+        if analysis and d and save_oop:
+            analysis.add_oop(d)
         elif d is None:
             # print ("Failed to create an Oop @ 0x%08x"%(addr))
             return None

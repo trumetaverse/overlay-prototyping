@@ -28,7 +28,7 @@ class MethodCounters(BaseOverlay):
             setattr(self, k, v)
 
     def update_fields(self, force_update=False):
-        jva = getattr(self, "jvm_analysis")
+        jva = getattr(self, "analysis")
 
         meta = None
         if self.is_updated(force_update):
@@ -72,7 +72,7 @@ class ConstMethod(BaseOverlay):
 
     def update_fields(self, force_update=False):
 
-        jva = getattr(self, "jvm_analysis")
+        jva = getattr(self, "analysis")
         meta = None
         if self.is_updated(force_update):
             return
@@ -120,11 +120,11 @@ class ConstMethod(BaseOverlay):
                None
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis):
+    def from_bytes(cls, addr, _bytes, analysis):
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis,
+        kargs = {"addr":addr,'analysis':jvm_analysis,
                  'updated':False,"metatype":'ConstMethod',
                  'ooptype':'', 'klasstype':'', 'is_32bit':jvm_analysis.is_32bit}
         name_fields(data_unpack, nfields, fields=kargs)
@@ -173,7 +173,7 @@ class MethodData(BaseOverlay):
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis,
+        kargs = {"addr":addr,'analysis':jvm_analysis,
                  'updated':False,"metatype":'MethodData',
                  'ooptype':'', 'klasstype':''}
         name_fields(data_unpack, nfields, fields=kargs)
@@ -383,7 +383,7 @@ class Method(BaseOverlay):
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False,"metatype":'Method',
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False,"metatype":'Method',
                  'ooptype':'', 'klasstype':''}
         name_fields(data_unpack, nfields, fields=kargs)
         kargs['unpacked_values'] = data_unpack
@@ -481,7 +481,7 @@ class ConstantPool(BaseOverlay):
             self.extract_cp_entrys()
 
     def extract_cp_entrys(self):
-        jva = getattr(self, 'jvm_analysis')
+        jva = getattr(self, 'analysis')
         cp_cnt = getattr(self, 'cp_count')
         base = getattr(self, 'addr')
 
@@ -540,7 +540,7 @@ class ConstantPool(BaseOverlay):
             return jvm_analysis.get_internal_object(addr)
 
 
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False,"metatype":'ConstantPool',
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False,"metatype":'ConstantPool',
                  'ooptype':'', 'klasstype':'', 'cp_count':0, 'entrys':[]}
         data_unpack = struct.unpack(fmt, _bytes)
         name_fields(data_unpack, nfields, fields=kargs)
@@ -712,7 +712,7 @@ class CPCache(BaseOverlay):
         if jvm_analysis.has_internal_object(addr):
             return jvm_analysis.get_internal_object(addr)
 
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis,
+        kargs = {"addr":addr,'analysis':jvm_analysis,
                  'updated':False,"metatype":'ConstantPoolCache',
                  'ooptype':'', 'klasstype':'',
                  'is_32bit':jvm_analysis.is_32bit}

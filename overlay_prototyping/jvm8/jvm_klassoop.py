@@ -174,7 +174,7 @@ class Oop(BaseOverlay):
         return None
 
     def accumulate_values(self, to_lookup={}, bread_crumbs={}, found_values={}, set_bread_crumbs=False):
-        jva = getattr(self, 'jvm_analysis', None)
+        jva = getattr(self, 'analysis', None)
         # structure ==> {addr:{"klass:field":addr, ...}, ...}
         logit = False  # if str(self).find('java/util/Hashtable$Entry') == -1 else True
         klass_fld_values = getattr(self, 'oop_field_values_by_name', None)
@@ -221,7 +221,7 @@ class Oop(BaseOverlay):
 
     def update_values(self, bread_crumbs={}, found_values={}, updated={}):
         # structure ==> {addr:{"klass:field":addr, ...}, ...}
-        jva = getattr(self, 'jvm_analysis', None)
+        jva = getattr(self, 'analysis', None)
         klass_fld_values = getattr(self, 'oop_field_values_by_name', None)
         res = {}
         klasses = self.get_ordered_klass_dependencies()
@@ -443,7 +443,7 @@ class Oop(BaseOverlay):
     def agg_size(self):
         self.update_fields()
         sz = self.size()
-        jva = getattr(self, 'jvm_analysis', None)
+        jva = getattr(self, 'analysis', None)
         klass = getattr(self, 'klass_value', None)
         if klass:
             fld_sz_str = 'oop_nonstatic_field_size'
@@ -483,7 +483,7 @@ class Oop(BaseOverlay):
             return
         setattr(self, 'parse_flds_in_progress', True)
         try:
-            jva = getattr(self, "jvm_analysis")
+            jva = getattr(self, "analysis")
             klass = self.get_klass()
 
             if klass is None or type(klass) != KlassInstance or \

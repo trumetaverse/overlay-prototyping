@@ -89,15 +89,15 @@ class DictionaryEntry(BaseOverlay):
         return res
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis):
-        #if jvm_analysis and jvm_analysis.has_internal_object(addr):
+    def from_bytes(cls, addr, _bytes, analysis):
+        #if analysis and analysis.has_internal_object(addr):
         #    return jvm_analysis.get_internal_object(addr)
         global KLASSES_PROCESSED, MAX_DICT_ENTRYS, NUM_OBSERVED
         #jvm_analysis.log ("Processing a DictionaryEntry")
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
         name_fields(data_unpack, nfields, fields=kargs)
         _next = kargs['next']
         kargs['has_next'] = _next != 0 and \
@@ -217,7 +217,7 @@ class DictionaryBucket(BaseOverlay):
         nfields = DictionaryBucket.named32 if jvm_analysis.is_32bit else DictionaryEntry.named64
         fmt = DictionaryBucket.bits32 if jvm_analysis.is_32bit else DictionaryBucket.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
         name_fields(data_unpack, nfields, fields=kargs)
 
         _entry = kargs["entry"]
@@ -278,7 +278,7 @@ class Dictionary(BaseOverlay):
         nfields = Dictionary.named32 if jvm_analysis.is_32bit else Dictionary.named64
         fmt = Dictionary.bits32 if jvm_analysis.is_32bit else Dictionary.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
         name_fields(data_unpack, nfields, fields=kargs)
 
         kargs['bucket_values'] = None

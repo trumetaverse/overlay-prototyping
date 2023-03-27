@@ -39,8 +39,8 @@ class U2(BaseOverlay):
         pass
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis):
-        fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
+    def from_bytes(cls, addr, _bytes, analysis):
+        fmt = cls.bits32 if analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
         return data_unpack[0]
 
@@ -63,7 +63,7 @@ class U1(BaseOverlay):
         pass
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis):
+    def from_bytes(cls, addr, _bytes, analysis):
         return ord(_bytes[0])
 
 
@@ -85,8 +85,8 @@ class U4(BaseOverlay):
         pass
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis):
-        fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
+    def from_bytes(cls, addr, _bytes, analysis):
+        fmt = cls.bits32 if analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
         return data_unpack[0]
 
@@ -150,7 +150,7 @@ class ArrayT(BaseOverlay):
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         cls_name = cls_str.split("<")[1].split(">")[0]
         mcls = ARRAY_MAP.get(cls_name.strip('*'), None)
-        kargs = {"addr": addr, 'jvm_analysis': jvm_analysis, 'updated': False, 'elem': [], "T": cls_name,
+        kargs = {"addr": addr, 'analysis': jvm_analysis, 'updated': False, 'elem': [], "T": cls_name,
                  'value_ptr': False, 'cls': mcls, }
         data_unpack = struct.unpack(fmt, _bytes)
 

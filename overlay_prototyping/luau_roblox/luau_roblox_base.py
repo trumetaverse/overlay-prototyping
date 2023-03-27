@@ -15,9 +15,11 @@ class LuauRobloxBase(BaseOverlay):
     size64 = get_size64(_overlay)
     types = get_field_types(_overlay)
 
+
     def __init__(self, **kargs):
         self.tt = -1
         self.marked = -1
+        self.gc_padding_0 = -1
         for k, v in kargs.items():
             setattr(self, k, v)
 
@@ -56,7 +58,7 @@ class LuauRobloxBase(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, nbytes, analysis=None, is_32bit=False):
-        kargs = {"addr": addr, "updated": False, 'jvm_analysis': analysis,
+        kargs = {"addr": addr, "updated": False, 'analysis': analysis,
                  "type": cls._name, 'is_32bit': is_32bit}
         fmt = cls.bits32
         sz = cls.struct_size(is_32bit)
@@ -83,10 +85,10 @@ class LuauRobloxBase(BaseOverlay):
         return v.is_valid_gc_header()
 
     def is_valid_gc_header(self):
-        return self.tt in TYPES and self.marked in VALID_MARKS
+        return self.tt in TYPES and self.marked in VALID_MARKS and self.gc_padding_0 == 0
 
     @classmethod
     def from_int(cls, addr, value, analysis=None, is_32bit=True):
-        nbytes = struct.pack(">I", value)
+        nbytes = struct.pack("<I", value)
         return cls.from_bytes(addr, nbytes, analysis=analysis, is_32bit=is_32bit)
 

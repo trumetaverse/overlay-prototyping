@@ -59,7 +59,7 @@ def restrict_klass_parsing(flag=True):
     global RESTRICT_CLASS_PARSING
     RESTRICT_CLASS_PARSING = flag
 
-def get_klass_info(addr, jvm_analysis):
+def get_klass_info(addr, analysis):
     # check the klass and extract key info to determine
     # how the oop should dispatch the remainder of its
     # parsing at the given address
@@ -68,7 +68,7 @@ def get_klass_info(addr, jvm_analysis):
            'basic_type':None, 'basic_type_sz':0, 'is_prim':False,
            'prim_value':None, 'is_klass':False,
     }
-    fmt = Klass.bits32 if jvm_analysis.is_32bit else Klass.bits64
+    fmt = Klass.bits32 if analysis.is_32bit else Klass.bits64
     nfields = Klass.named32 if jvm_analysis.is_32bit else Klass.named64
     sz = Klass.size32 if jvm_analysis.is_32bit else\
          Klass.size64

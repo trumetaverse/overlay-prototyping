@@ -87,16 +87,16 @@ class StringTableEntry(BaseOverlay):
         return res
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis):
+    def from_bytes(cls, addr, _bytes, analysis):
         global STRINGS_PROCESSED, MAX_DICT_ENTRYS, NUM_OBSERVED
-        #if jvm_analysis and jvm_analysis.has_internal_object(addr):
-        #    return jvm_analysis.get_internal_object(addr)
+        #if analysis and analysis.has_internal_object(addr):
+        #    return analysis.get_internal_object(addr)
         STRINGS_PROCESSED += 1
         jvm_analysis.log ("Processing StringEntry @ 0x%08x"%(addr))
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False,}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False,}
         name_fields(data_unpack, nfields, fields=kargs)
         _next = kargs['next']
         kargs['has_next'] = _next != 0 and \
@@ -193,7 +193,7 @@ class StringTableBucket(BaseOverlay):
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
         name_fields(data_unpack, nfields, fields=kargs)
 
         _entry = kargs["entry"]
@@ -257,7 +257,7 @@ class StringTable(BaseOverlay):
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'jvm_analysis':jvm_analysis, 'updated':False,}
+        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False,}
         name_fields(data_unpack, nfields, fields=kargs)
 
         kargs['bucket_values'] = None

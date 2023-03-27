@@ -59,7 +59,7 @@ class BaseOverlay(object):
     def __init__(self, **kargs):
         for k, v in kargs.items():
             setattr(self, k, v)
-        jva = getattr(self, 'jvm_analysis')
+        jva = getattr(self, 'analysis')
         setattr(self, 'word_sz', jva.word_sz)
         setattr(self, 'is_32bit', jva.is_32bit)
         setattr(self, 'field_cnt', 0)
@@ -71,16 +71,16 @@ class BaseOverlay(object):
         setattr(self, 'overlay_info', None)
 
     def __getstate__(self):
-        # jva = getattr(self, 'jvm_analysis', None)
-        # setattr(self, 'jvm_analysis', None)
+        # jva = getattr(self, 'analysis', None)
+        # setattr(self, 'analysis', None)
         # print ("Pickling: %s"%str(self))
         # odict = self.__dict__.copy()#copy.deepcopy(self.__dict__)
         # print ("Done with the copy: %s"%str(self))
-        # setattr(self, 'jvm_analysis', jva)
+        # setattr(self, 'analysis', jva)
         return self.__dict__
 
-    def set_jvm_analysis(self, jva):
-        setattr(self, 'jvm_analysis', jva)
+    def set_analysis(self, jva):
+        setattr(self, 'analysis', jva)
 
     def __setstate__(self, _dict):
         self.__dict__.update(_dict)
@@ -112,7 +112,7 @@ class BaseOverlay(object):
 
         addr = getattr(self, 'addr', None)
         overlay = getattr(self, '_overlay', None)
-        jva = getattr(self, 'jvm_analysis', None)
+        jva = getattr(self, 'analysis', None)
         try:
             if jva and jva.is_32bit:
                 self.overlay_info = get_overlay_offsets32(overlay,
@@ -473,7 +473,7 @@ class BaseOverlay(object):
         unpacked_values = getattr(self, 'unpacked_values', None)
         addr = getattr(self, 'addr', None)
         overlay = getattr(self, '_overlay', None)
-        jva = getattr(self, 'jvm_analysis', None)
+        jva = getattr(self, 'analysis', None)
         if jva and unpacked_values and jva.is_32bit:
             return print_overlay_offsets32(overlay,
                                            unpacked_values, addr)
@@ -482,7 +482,7 @@ class BaseOverlay(object):
                                            unpacked_values, addr)
 
     def get_jva(self):
-        return getattr(self, 'jvm_analysis')
+        return getattr(self, 'analysis')
 
     def is_win(self):
         return self.get_jva().is_win

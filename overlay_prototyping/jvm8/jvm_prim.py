@@ -67,8 +67,8 @@ class ByteOop(BaseOverlay):
         raise Exception("%s has no field '%s'"%(self._name, field_name))
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis,
+    def from_bytes(cls, addr, _bytes, analysis):
+        kargs = { "addr":addr, "updated":False, 'analysis':analysis,
                   "ooptype":cls._name, "klasstype":""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
@@ -127,9 +127,9 @@ class CharOop(BaseOverlay):
         raise Exception("%s has no field '%s'"%(self._name, field_name))
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis):
+    def from_bytes(cls, addr, _bytes, analysis):
         jva = jvm_analysis
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis,
                   "ooptype":cls._name, "klasstype":""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
@@ -189,7 +189,7 @@ class DoubleOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis,
                     "ooptype":cls._name, "klasstype":""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
@@ -250,7 +250,7 @@ class FloatOop(BaseOverlay):
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
         jva = jvm_analysis
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
@@ -310,7 +310,7 @@ class IntOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis,
                     "ooptype":cls._name, "klasstype":""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
@@ -370,7 +370,7 @@ class LongOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
@@ -430,7 +430,7 @@ class ShortOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
@@ -492,7 +492,7 @@ class BoolOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
@@ -556,7 +556,7 @@ class ByteArrayOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
@@ -617,7 +617,7 @@ class CharArrayOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
@@ -678,7 +678,7 @@ class DoubleArrayOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
@@ -735,7 +735,7 @@ class FloatArrayOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
@@ -792,7 +792,7 @@ class IntArrayOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
@@ -849,7 +849,7 @@ class LongArrayOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
@@ -907,7 +907,7 @@ class ShortArrayOop(BaseOverlay):
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
         jva = jvm_analysis
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
@@ -964,7 +964,7 @@ class BoolArrayOop(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'jvm_analysis':jvm_analysis, "ooptype":cls._name,
+        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
                   "klasstype":""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)

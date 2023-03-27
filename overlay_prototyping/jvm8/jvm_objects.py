@@ -48,14 +48,14 @@ class VMStructEntry(BaseOverlay):
                    typeNam, fieldNam, typeNam, offset))
 
     @classmethod
-    def from_bytes(cls, addr, _bytes, jvm_analysis, is_32bit=True, word_sz=4):
-        is_32bit = jvm_analysis.is_32bit if jvm_analysis else is_32bit
+    def from_bytes(cls, addr, _bytes, analysis, is_32bit=True, word_sz=4):
+        is_32bit = analysis.is_32bit if analysis else is_32bit
         fmt = cls.bits32 if is_32bit else cls.bits64
         nfields = cls.named32 if is_32bit else cls.named64
         jva = jvm_analysis
         data_unpack = struct.unpack(fmt, _bytes)
         kargs = {"addr":addr, 'is_32bit':is_32bit, 'word_sz':word_sz,
-                 'jvm_analysis':jvm_analysis, 'updated':False}
+                 'analysis':jvm_analysis, 'updated':False}
         name_fields(data_unpack, nfields, fields=kargs)
 
         kargs['typeName_str'] = ""
