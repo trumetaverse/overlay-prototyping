@@ -49,6 +49,9 @@ class LuauSifterResults(object):
             self.parse_line(line, parse_gc_header=parse_gc_header)
             cnt += 1
 
+    def get_potential_tstrings(self):
+        return sorted([i for i in self.pot_objects if i.tt == 5 and i.marked > 0], key=lambda u: u.sink_vaddr)
+
 
 class LuauSifterResult(object):
     KEY_VALUES = ["paddr",

@@ -20,8 +20,12 @@ class LuauRobloxBase(BaseOverlay):
         self.tt = -1
         self.marked = -1
         self.gc_padding_0 = -1
+        self.lua_strings = None
+
         for k, v in kargs.items():
             setattr(self, k, v)
+
+
 
     def is_klass_prim(self):
         return True
@@ -92,3 +96,8 @@ class LuauRobloxBase(BaseOverlay):
         nbytes = struct.pack("<I", value)
         return cls.from_bytes(addr, nbytes, analysis=analysis, is_32bit=is_32bit)
 
+    def is_string(self):
+        return False
+
+    def is_prim(self):
+        return False

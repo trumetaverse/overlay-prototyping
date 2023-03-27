@@ -255,12 +255,15 @@ class MemRanges(object):
 
 
 class Analysis(object):
-    def __init__(self, dmp_file=None, radare_file_data=None, load_memory_data=False):
+    DEFAULT_OBJECT_READ_SZ = 8192
+
+    def __init__(self, dmp_file=None, radare_file_data=None, load_memory_data=False, **kargs):
         self.mem_ranges = MemRanges()
         self.radare_file = radare_file_data
         self.dmp_file = dmp_file
         self.radare_file_data = radare_file_data
         self.fh = None
+        self.memory_loaded = False
 
         if radare_file_data is not None:
             self.load_from_radare_section_json(radare_file_data)
@@ -276,6 +279,7 @@ class Analysis(object):
             raise Exception("Unable to load memory, no opened file")
 
         self.mem_ranges.load_memory_range_bytes_from_file(self.dmp_file)
+        self.memory_loaded = True
 
     def open_memory_file(self, filename):
         self.memory_file = filename
@@ -337,3 +341,7 @@ class Analysis(object):
         if vaddr is not None:
             return self.mem_ranges.get_memrange_from_vaddr(vaddr)
         return self.mem_ranges.get_memrange_from_paddr(paddr)
+
+    @classmethod
+    def update_default_read_sz(cls, sz=DEFAULT_OBJECT_READ_SZ):
+        cls.DEFAULT_OBJECT_READ_SZ = sz

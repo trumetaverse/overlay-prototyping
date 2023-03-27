@@ -4,7 +4,6 @@ from . luau_roblox_base import LuauRobloxBase
 from . luau_roblox_overlay import LUAUR_TSTRING
 import struct
 
-
 class LuauRobloxTstring(LuauRobloxBase):
     _name = "TString"
     _overlay = LUAUR_TSTRING
@@ -18,8 +17,12 @@ class LuauRobloxTstring(LuauRobloxBase):
     _TYPE = 0x05
 
     def __init__(self, **kargs):
+        self.value = None
         for k,v in kargs.items():
             setattr(self, k, v)
+
+    def probably_valid_string(self):
+        return self.value is not None and len(str(self.value)) > 0
 
     def is_klass_prim(self):
         return True
