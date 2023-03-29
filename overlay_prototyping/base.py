@@ -426,8 +426,18 @@ class BaseOverlay(object):
 
     @classmethod
     def create_overlay(cls, name, overlay_definition, is_win=True):
-        new_cls = type(name, (BaseOverlay,), {})
-        cls.reset_overlay(overlay_definition)
+        attrs = {
+            '_overlay': overlay_definition,
+            'bits32': get_bits32(overlay_definition),
+            'bits64': get_bits64(overlay_definition),
+            'named32': get_named_array32(overlay_definition),
+            'named64': get_named_array64(overlay_definition),
+            'size32': get_size32(overlay_definition),
+            'size64': get_size64(overlay_definition),
+            'types': get_field_types(overlay_definition),
+            'is_win': is_win
+        }
+        new_cls = type(name, (BaseOverlay,), attrs)
         new_cls.is_win = is_win
         return new_cls
 
@@ -457,12 +467,12 @@ class BaseOverlay(object):
             if isinstance(_value, int):
                 t = dump_data[k]['type']
                 fmt = "0x{:08x}"
-                if t.find('8') > -1:
+                if t.find('32') > -1 or t.find('*') > -1:
+                    fmt = "0x{:08x}"
+                elif t.find('8') > -1:
                     fmt = "0x{:02x}"
                 elif t.find('16') > -1:
                     fmt = "0x{:04x}"
-                elif t.find('32') > -1:
-                    fmt = "0x{:08x}"
                 value = fmt.format(_value)
             dump_data[k]['value'] = value
 
@@ -470,7 +480,7 @@ class BaseOverlay(object):
         lines = []
         for addr in addrs:
             v = dump_data[addr]
-            line = "0x{:08x} {} {} = {}".format(k, v['type'], v['name'], v['value'])
+            line = "0x{:08x} {} {} = {}".format(addr, v['type'], v['name'], v['value'])
             lines.append(line)
         return "\n".join(lines)
 

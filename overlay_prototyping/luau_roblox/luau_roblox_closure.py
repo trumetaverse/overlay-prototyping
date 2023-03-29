@@ -1,14 +1,14 @@
 
 from ..base import *
 from . luau_roblox_base import LuauRobloxBase
-from . luau_roblox_overlay import LUAUR_TSTRING
+from . luau_roblox_overlay import LUAR_CLOSURE_UPREFS, LUAR_CLOSURE_UVALS, LUAR_CLOSURE_RAW
 from . consts import LUAR_ROBLOX_BASE_FUNCS, LUAR_ROBLOX_TYPES, LUAR_ROBLOX_EVENT_NAMES
 
 import struct
 
-class LuauRobloxTstring(LuauRobloxBase):
-    _name = "TString"
-    _overlay = LUAUR_TSTRING
+class LuauRobloxClosure(LuauRobloxBase):
+    _name = "Closure_Raw"
+    _overlay = LUAR_CLOSURE_RAW
     bits32 = get_bits32(_overlay)
     bits64 = get_bits64(_overlay)
     named32 = get_named_array32(_overlay)
@@ -16,12 +16,11 @@ class LuauRobloxTstring(LuauRobloxBase):
     size32 = get_size32(_overlay)
     size64 = get_size64(_overlay)
     types = get_field_types(_overlay)
-    _TYPE = 0x05
+    _TYPE = 0x07
 
     def __init__(self, **kargs):
+        super(LuauRobloxClosure, self).__init__(**kargs)
         self.value = None
-        super(LuauRobloxTstring, self).__init__(**kargs)
-        self.value = kargs.get('value', None)
         # for k,v in kargs.items():
         #     setattr(self, k, v)
 
@@ -47,10 +46,10 @@ class LuauRobloxTstring(LuauRobloxBase):
         return self.get_dump()
 
     def get_dump(self, unpacked_values=None):
-        dump_data = super(LuauRobloxTstring, self).get_dump()
-        data_addr = self.end + 4 if self.is_32bit else self.end + 8
-        dump_data[data_addr] = {'name':'data',
-              'type': 'char[]', 'value': self.value}
+        dump_data = super(LuauRobloxClosure, self).get_dump()
+        # data_addr = self.end + 4 if self.is_32bit else self.end + 8
+        # dump_data[data_addr] = {'name':'data',
+        #       'type': 'char[]', 'value': self.value}
         return dump_data
 
     def update_fields(self, force_update=False):
@@ -88,18 +87,16 @@ class LuauRobloxTstring(LuauRobloxBase):
                   "type":cls._name, 'is_32bit': is_32bit}
         fmt = cls.bits32
         sz = cls.struct_size(is_32bit)
-        if len(nbytes) < sz:
-            return None
         data_unpack = struct.unpack(fmt, nbytes[:sz])
         nfields = cls.named32 if is_32bit else cls.named64
         name_fields(data_unpack, nfields, fields=kargs)
         pad = kargs['end'] % 8 if kargs['end'] % 8 != 0 else 4 if is_32bit else 8
-        str_len = kargs['end'] - (addr + sz ) + 4 if is_32bit else 8
-        kargs['value'] = "".join([chr(x) for x in nbytes[sz:sz+str_len]])
-        kargs['data'] = kargs['value']
-        kargs['str_len'] = str_len
-        kargs['lua_sz'] = str_len + sz + pad
-        kargs['unpacked_values'] = data_unpack
+        # str_len = kargs['end'] - (addr + sz ) + 4 if is_32bit else 8
+        # kargs['value'] = "".join([chr(x) for x in nbytes[sz:sz+str_len]])
+        # kargs['data'] = kargs['value']
+        # kargs['str_len'] = str_len
+        # kargs['lua_sz'] = str_len + sz + pad
+        # kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
 

@@ -1,5 +1,6 @@
 import json
 from .luau_roblox_base import LuauRobloxBase, TYPES, VALID_MARKS
+from .consts import *
 
 LUAR_FILTERS = {
     "addr_is_lua_object": lambda lsr: lsr.sink_vaddr % 8 == 0,
@@ -9,22 +10,45 @@ LUAR_FILTERS = {
 class LuauSifterResults(object):
     def __init__(self):
         self.srcs = {}
+        self.obj_references = {}
         self.pot_objects = {}
         self.distinct_values = {}
         self.potential_gcheaders = {}
         self.densities = {}
-        self.types = {}
+        self.results = {}
+        self.pot_closures = {}
+        self.pot_upvals = {}
+        self.pot_userdata = {}
+        self.pot_strings = {}
+        self.pot_tables = {}
+        self.pot_prototype = {}
+        self.unknown = {}
+        self.tag_objects = {
+            TSTRING: self.pot_strings,
+            TTABLE: self.pot_tables,
+            TUPVAL: self.pot_upvals,
+            TUSERDATA: self.pot_userdata,
+            TPROTO: self.pot_prototype,
+            TCLOSURE: self.pot_closures,
+        }
 
 
 
     def add_sifter_result(self, r):
-        if not r.sink_vaddr in self.pot_objects and r.is_valid_gc_header():
+        self.results[r.vaddr] = r
+        if r.is_valid_gc_header() and r.tt in self.tag_objects and r.marked in VALID_MARKS:
             self.pot_objects[r.sink_vaddr] = r
+            self.tag_objects[r.tt][r.sink_vaddr] = r
+            if r.sink_vaddr not in self.obj_references:
+                self.obj_references[r.sink_vaddr] = set()
+
+            self.obj_references[r.sink_vaddr].add(r.vaddr)
             if r.sink_vaddr_base not in self.densities:
                 self.densities[r.sink_vaddr_base] = set()
-                self.types[r.sink_vaddr_base] = {k: set() for k in range(0, 0xd)}
             self.densities[r.sink_vaddr_base].add(r.sink_vaddr)
-            self.types[r.sink_vaddr_base][r.tt].add(r.sink_vaddr)
+
+        else:
+            self.unknown[r.sink_vaddr] = r
 
         if r.sink_value not in self.distinct_values:
             self.distinct_values[r.sink_value] = 0
@@ -35,6 +59,8 @@ class LuauSifterResults(object):
 
         self.srcs[r.sink_vaddr].append({'vaddr': r.vaddr, 'paddr': r.paddr})
 
+    def get_potential_objects(self):
+        return list(self.pot_objects.values())
 
     def parse_line(self, line, parse_gc_header=False):
         r = LuauSifterResult.from_line(line, parse_gc_header=parse_gc_header)
@@ -42,15 +68,21 @@ class LuauSifterResults(object):
             self.add_sifter_result(r)
         return r
 
-    def parse_file(self, filename, parse_gc_header=False):
+    def parse_file(self, filename, parse_gc_header=False, bulk_load=True):
         fh = open(filename)
-        cnt = 0
-        for line in fh:
-            self.parse_line(line, parse_gc_header=parse_gc_header)
-            cnt += 1
+        if bulk_load:
+            data = fh.readlines()
+            for line in data:
+                self.parse_line(line, parse_gc_header=parse_gc_header)
+        else:
+            cnt = 0
+            for line in fh:
+                self.parse_line(line, parse_gc_header=parse_gc_header)
+                cnt += 1
 
     def get_potential_tstrings(self):
-        return sorted([i for i in self.pot_objects if i.tt == 5 and i.marked > 0], key=lambda u: u.sink_vaddr)
+        pot_objects = list(self.pot_objects.values())
+        return sorted([i for i in pot_objects if i.tt == TSTRING and i.marked in VALID_MARKS], key=lambda u: u.sink_vaddr)
 
 
 class LuauSifterResult(object):
@@ -95,7 +127,7 @@ class LuauSifterResult(object):
             self.gcheader = LuauRobloxBase.from_int(self.sink_vaddr, self.sink_value)
 
     def is_valid_gc_header(self):
-        return self.tt in TYPES and self.marked in VALID_MARKS and self.padding == 0
+        return self.tt in VALID_OBJ_TYPES and self.marked in VALID_MARKS and self.padding == 0
     def valid_gcheader(self):
         # return self.gcheader is not None and self.gcheader.is_valid_gc_header()
         return self.is_valid_gc_header()
@@ -106,7 +138,10 @@ class LuauSifterResult(object):
         return cls(parse_gc_header=parse_gc_header, **r)
 
     def potential_lua_object(self):
-        return all(v(self) for v in LUAR_FILTERS.values())
+        # return all(v(self) for v in self.)
+        if self.tt == TSTRING and self.sink_vaddr % 8 != 0:
+            return False
+        return self.is_valid_gc_header()
 
     def __str__(self):
         return json.dumps(self.__dict__)

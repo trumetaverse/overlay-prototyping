@@ -1,5 +1,5 @@
 from .. base import *
-from .luau_roblox_overlay import LUAUR_GCHEADER, TYPES, VALID_MARKS
+from .luau_roblox_overlay import *
 import struct
 
 int_to_bytes = lambda x: struct.pack(">I", d)
@@ -21,11 +21,14 @@ class LuauRobloxBase(BaseOverlay):
         self.marked = -1
         self.gc_padding_0 = -1
         self.lua_strings = None
+        self.references = set()
 
         for k, v in kargs.items():
             setattr(self, k, v)
 
 
+    def add_reference(self, analysis, ref_addr):
+        self.references.add(ref_addr)
 
     def is_klass_prim(self):
         return True
@@ -96,8 +99,41 @@ class LuauRobloxBase(BaseOverlay):
         nbytes = struct.pack("<I", value)
         return cls.from_bytes(addr, nbytes, analysis=analysis, is_32bit=is_32bit)
 
+    def valid_type(self, type_enum):
+        return self.tt == type_enum and self.marked in VALID_MARKS
+
     def is_string(self):
-        return False
+        return self.valid_type(TSTRING)
+
+    def is_bool(self):
+        return self.tt == TBOOLEAN
+
+    def is_table(self):
+        return self.valid_type(TTABLE)
+
+    def is_ud(self):
+        return self.valid_type(TUSERDATA)
+
+    def is_function(self):
+        return self.valid_type(TFUNCTION)
+
+    def is_number(self):
+        return self.tt == TNUMBER
+
+    def is_vector(self):
+        return self.tt == TVECTOR
+
+    def is_thread(self):
+        return self.valid_type(TTHREAD)
+
+    def is_proto(self):
+        return self.valid_type(TPROTO)
+
+    def is_upval(self):
+        return self.valid_type(TUPVAL)
+
+    def is_lud(self):
+        return self.tt == TLIGHTUSERDATA
 
     def is_prim(self):
-        return False
+        return self.tt in {TNUMBER, TBOOLEAN, TVECTOR, TNIL}

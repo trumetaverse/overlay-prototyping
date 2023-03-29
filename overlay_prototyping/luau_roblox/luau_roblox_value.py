@@ -19,9 +19,8 @@ class LuauRobloxTstring(LuauRobloxBase):
     _TYPE = 0x05
 
     def __init__(self, **kargs):
-        self.value = None
         super(LuauRobloxTstring, self).__init__(**kargs)
-        self.value = kargs.get('value', None)
+        self.value = None
         # for k,v in kargs.items():
         #     setattr(self, k, v)
 
@@ -88,8 +87,6 @@ class LuauRobloxTstring(LuauRobloxBase):
                   "type":cls._name, 'is_32bit': is_32bit}
         fmt = cls.bits32
         sz = cls.struct_size(is_32bit)
-        if len(nbytes) < sz:
-            return None
         data_unpack = struct.unpack(fmt, nbytes[:sz])
         nfields = cls.named32 if is_32bit else cls.named64
         name_fields(data_unpack, nfields, fields=kargs)
@@ -113,14 +110,3 @@ class LuauRobloxTstring(LuauRobloxBase):
         setattr(tstring, 'raw_bytes', nbytes)
         return tstring
 
-    def is_string(self):
-        return True
-
-    def is_base_func_name(self):
-        return str(self.value) in LUAR_ROBLOX_BASE_FUNCS
-
-    def is_event_name(self):
-        return str(self.value) in LUAR_ROBLOX_EVENT_NAMES
-
-    def is_base_type_name(self):
-        return str(self.value) in LUAR_ROBLOX_TYPES

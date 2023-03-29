@@ -1,5 +1,5 @@
 import json
-
+from . logger import init_logger
 
 class MemRange(object):
     def __init__(self, **kargs):
@@ -112,6 +112,7 @@ class MemRanges(object):
         self.page_size = 4096
         self.alignment = 4
         self.word_sz = 4
+        self.range_by_name = {}
 
     def paddr_range(self):
         min_range = min([mr.paddr for mr in self.mem_ranges])
@@ -182,6 +183,7 @@ class MemRanges(object):
 
     def add_mem_range(self, mem_range: MemRange, update_index = False):
         self.mem_ranges.append(mem_range)
+        self.range_by_name[mem_range.name] = mem_range
         if update_index:
             self.update_index()
 
@@ -253,17 +255,22 @@ class MemRanges(object):
             return mr.read_at_paddr(paddr, sz)
         return None
 
+    def get_memrange_from_name(self, name):
+        return self.range_by_name.get(name, None)
+
 
 class Analysis(object):
-    DEFAULT_OBJECT_READ_SZ = 8192
+    DEFAULT_OBJECT_READ_SZ = 16384
 
-    def __init__(self, dmp_file=None, radare_file_data=None, load_memory_data=False, **kargs):
+    def __init__(self, dmp_file=None, radare_file_data=None, load_memory_data=False, name="Analysis", **kargs):
         self.mem_ranges = MemRanges()
         self.radare_file = radare_file_data
         self.dmp_file = dmp_file
         self.radare_file_data = radare_file_data
         self.fh = None
         self.memory_loaded = False
+
+        self.log = init_logger(name)
 
         if radare_file_data is not None:
             self.load_from_radare_section_json(radare_file_data)
@@ -274,12 +281,14 @@ class Analysis(object):
         if load_memory_data:
             self.load_memory()
 
+
     def load_memory(self):
         if self.fh is None:
             raise Exception("Unable to load memory, no opened file")
-
+        self.log.debug("Loading memory sections from {}".format(self.dmp_file))
         self.mem_ranges.load_memory_range_bytes_from_file(self.dmp_file)
         self.memory_loaded = True
+        self.log.debug("Completed memory sections from {}".format(self.dmp_file))
 
     def open_memory_file(self, filename):
         self.memory_file = filename
@@ -303,9 +312,11 @@ class Analysis(object):
 
     def load_from_radare_section_json(self, filename):
         self.radare_file_data = filename
+        self.log.debug("Loading memory sections from {}".format(self.radare_file_data))
         self.mem_ranges = MemRanges.load_from_radare_section_json(filename=filename)
         if self.mem_ranges is None:
             raise Exception("Failed to load memory ranges")
+        self.log.debug("Loaded {} memory sections from {}".format(len(self.mem_ranges.mem_ranges), self.radare_file_data))
         return self.mem_ranges
 
     def get_paddr_from_vaddr(self, vaddr: int):
@@ -323,6 +334,9 @@ class Analysis(object):
     def get_vaddr_base_from_paddr(self, paddr: int):
         mr = self.mem_ranges.get_memrange_from_paddr(paddr)
         return mr.vaddr
+
+    def get_mem_range_by_name(self, name):
+        return self.mem_ranges.get_memrange_from_name(name)
 
     def valid_vaddr(self, vaddr: int):
         return self.mem_ranges.get_memrange_from_vaddr(vaddr) is not None
