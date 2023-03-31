@@ -157,7 +157,7 @@ class LuauRW_Union(Union):
         for line in self.get_dump()[1]:
             fld = self._fields_dict_.get(line['name'])
             line['value_str'] = self.get_str_fmt(fld).format(line['value'])
-            l = "{addr:08x} {name} {type} {value_str}".format(**line)
+            l = "{addr:08x} {type} {name} {value_str}".format(**line)
             # if isinstance(line['value'], int):
             #     l = "{addr:08x} {name} {type} {value:08x}".format(**line)
             lines.append(l)
@@ -343,7 +343,7 @@ class LuauRW_Base(LittleEndianStructure):
         for line in self.get_dump()[1]:
             fld = self._fields_dict_.get(line['name'])
             line['value_str'] = self.get_str_fmt(fld).format(line['value'])
-            l = "{addr:08x} {name} {type} {value_str}".format(**line)
+            l = "{addr:08x} {type} {name} {value_str}".format(**line)
             # if isinstance(line['value'], int):
             #     l = "{addr:08x} {name} {type} {value:08x}".format(**line)
             lines.append(l)
@@ -397,8 +397,9 @@ class LuauRW_Base(LittleEndianStructure):
         fld = None
         if hasattr(self, '_cached_gch'):
             return getattr(self, '_cached_gch')
-
-        if self.__class__.__name__.find('LuauRW_GCHeader') > -1:
+        elif hasattr(self, 'tt') and hasattr(self, 'marked') and hasattr(self, 'gch_padding'):
+            fld = self
+        elif self.__class__.__name__.find('LuauRW_GCHeader') > -1:
             fld = self
         else:
             for name, fld_type in self._fields_:

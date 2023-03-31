@@ -1,7 +1,7 @@
 import json
 
 from .consts import *
-from .luau_roblox_base import LuauRobloxBase
+from .luau_roblox_overlay import LuauRW_GCHeader
 
 LUAR_FILTERS = {
     "addr_is_lua_object": lambda lsr: lsr.sink_vaddr % 8 == 0,
@@ -125,7 +125,7 @@ class LuauSifterResult(object):
             self.padding = (self.sink_value & 0xff000000) >> 24
 
         if isinstance(self.sink_value, int) and parse_gc_header:
-            self.gcheader = LuauRobloxBase.from_int(self.sink_vaddr, self.sink_value)
+            self.gcheader = LuauRW_GCHeader.from_int(self.sink_vaddr, self.sink_value)
 
     def is_valid_gc_header(self):
         return self.tt in VALID_OBJ_TYPES and self.marked in VALID_MARKS and self.padding == 0

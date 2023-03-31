@@ -3,7 +3,7 @@ from threading import Thread
 
 from .consts import *
 from .enumerate_luau_roblox import LuauSifterResults
-from .luau_roblox_base import LuauRobloxBase
+# from .luau_roblox_base import LuauRobloxBase
 from .luau_roblox_overlay import LuauRW_TString
 from ..analysis import Analysis, MemRange
 from ..base import BaseException
@@ -134,14 +134,14 @@ class LuauRobloxAnalysis(Analysis):
     def potentials_upvals(self):
         return self.get_potential_objects_from_sifter(TUPVAL)
 
-    @classmethod
-    def create_class(cls, name, overlay):
-        return LuauRobloxBase.create_overlay(name, overlay, bases=(LuauRobloxBase,))
+    # @classmethod
+    # def create_class(cls, name, overlay):
+    #     return LuauRobloxBase.create_overlay(name, overlay, bases=(LuauRobloxBase,))
 
-    def create_object_at(self, name, overlay, vaddr, sz=8192):
-        cls = LuauRobloxBase.create_overlay(name, overlay)
-        data = self.read_vaddr(vaddr, sz)
-        return cls.from_bytes(vaddr, data, self, self.is_32bit)
+    # def create_object_at(self, name, overlay, vaddr, sz=8192):
+    #     cls = LuauRobloxBase.create_overlay(name, overlay)
+    #     data = self.read_vaddr(vaddr, sz)
+    #     return cls.from_bytes(vaddr, data, self, self.is_32bit)
 
     def get_memrange(self, vaddr):
         return self.mem_ranges.get_memrange_from_vaddr(vaddr)
