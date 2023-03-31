@@ -1,27 +1,18 @@
-from threading import RLock
 import struct
+from datetime import datetime
+from threading import RLock
+
+from jvm_base import BaseOverlay
+from jvm_flags import AccessFlags
 from jvm_klass import Klass, ArrayKlass, KlassInstance, get_klass_info, \
     is_restrict_klass_parsing
-
-from jvm_overlays import OOP_TYPE, OOP_TYPE, ARRAY_OOP_TYPE, \
-    OBJ_ARRAY_OOP_TYPE, TYPE_ARRAY_OOP_TYPE, OOP_TYPE, \
-    CHAR_OOP_TYPE, BYTE_OOP_TYPE, INT_OOP_TYPE, LONG_OOP_TYPE, \
-    SHORT_OOP_TYPE, BOOL_OOP_TYPE, DOUBLE_OOP_TYPE, FLOAT_OOP_TYPE
-
+from jvm_overlays import ARRAY_OOP_TYPE, \
+    OBJ_ARRAY_OOP_TYPE, TYPE_ARRAY_OOP_TYPE, OOP_TYPE
 from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
     get_named_array64, get_field_types, name_fields, \
-    get_named_types_dict, get_klass, get_sym, \
-    resolve_syms, resolve_syms, get_size32, get_size64
-from jvm_base import BaseOverlay
-
+    get_size32, get_size64
 from jvm_prim import ByteOop, CharOop, DoubleOop, FloatOop, IntOop, LongOop, \
-    ShortOop, BoolOop, ByteArrayOop, CharArrayOop, \
-    DoubleArrayOop, FloatArrayOop, IntArrayOop, LongArrayOop, \
-    ShortArrayOop, BoolArrayOop
-
-from jvm_flags import AccessFlags
-
-from datetime import datetime
+    ShortOop, BoolOop
 
 
 def time_str():

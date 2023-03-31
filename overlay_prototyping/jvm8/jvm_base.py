@@ -1,12 +1,12 @@
-import struct, copy
+import struct
+from datetime import datetime
+
 from jvm_flags import AccessFlags
 from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
     get_named_array64, get_field_types, name_fields, \
     get_size32, get_size64, print_overlay_offsets32, \
     print_overlay_offsets64, get_overlay_offsets32, \
     get_overlay_offsets64
-
-from datetime import datetime
 
 
 def time_str():
@@ -933,8 +933,8 @@ class BaseOverlay(object):
 
     @classmethod
     def from_bytes(cls, addr, nbytes, jvm_analysis):
-        if jvm_analysis.has_internal_object(addr):
-            return jvm_analysis.get_internal_object(addr)
+        if jvm_analysis.has_object(addr):
+            return jvm_analysis.get_object(addr)
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         data_unpack = struct.unpack(fmt, nbytes)

@@ -1,8 +1,10 @@
-from .. base import *
-from .luau_roblox_overlay import LUAUR_GCHEADER, TYPES, VALID_MARKS
 import struct
 
+from .luau_roblox_overlay import *
+from ..base import *
+
 int_to_bytes = lambda x: struct.pack(">I", d)
+
 
 class LuauRobloxBase(BaseOverlay):
     _name = "GCHeader"
@@ -15,13 +17,18 @@ class LuauRobloxBase(BaseOverlay):
     size64 = get_size64(_overlay)
     types = get_field_types(_overlay)
 
-
     def __init__(self, **kargs):
         self.tt = -1
         self.marked = -1
         self.gc_padding_0 = -1
+        self.lua_strings = None
+        self.references = set()
+
         for k, v in kargs.items():
             setattr(self, k, v)
+
+    def add_reference(self, analysis, ref_addr):
+        self.references.add(ref_addr)
 
     def is_klass_prim(self):
         return True
@@ -57,19 +64,6 @@ class LuauRobloxBase(BaseOverlay):
         raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
-    def from_bytes(cls, addr, nbytes, analysis=None, is_32bit=False):
-        kargs = {"addr": addr, "updated": False, 'analysis': analysis,
-                 "type": cls._name, 'is_32bit': is_32bit}
-        fmt = cls.bits32
-        sz = cls.struct_size(is_32bit)
-        data_unpack = struct.unpack(fmt, nbytes[:sz])
-        nfields = cls.named32 if is_32bit else cls.named64
-        name_fields(data_unpack, nfields, fields=kargs)
-        kargs['unpacked_values'] = data_unpack
-        d = cls(**kargs)
-        return d
-
-    @classmethod
     def from_file_obj(cls, fobj, addr, offset=None, analysis=None, is_32bit=False):
         sz = cls.struct_size(is_32bit)
         if offset:
@@ -92,3 +86,41 @@ class LuauRobloxBase(BaseOverlay):
         nbytes = struct.pack("<I", value)
         return cls.from_bytes(addr, nbytes, analysis=analysis, is_32bit=is_32bit)
 
+    def valid_type(self, type_enum):
+        return self.tt == type_enum and self.marked in VALID_MARKS
+
+    def is_string(self):
+        return self.valid_type(TSTRING)
+
+    def is_bool(self):
+        return self.tt == TBOOLEAN
+
+    def is_table(self):
+        return self.valid_type(TTABLE)
+
+    def is_ud(self):
+        return self.valid_type(TUSERDATA)
+
+    def is_function(self):
+        return self.valid_type(TFUNCTION)
+
+    def is_number(self):
+        return self.tt == TNUMBER
+
+    def is_vector(self):
+        return self.tt == TVECTOR
+
+    def is_thread(self):
+        return self.valid_type(TTHREAD)
+
+    def is_proto(self):
+        return self.valid_type(TPROTO)
+
+    def is_upval(self):
+        return self.valid_type(TUPVAL)
+
+    def is_lud(self):
+        return self.tt == TLIGHTUSERDATA
+
+    def is_prim(self):
+        return self.tt in {TNUMBER, TBOOLEAN, TVECTOR, TNIL}

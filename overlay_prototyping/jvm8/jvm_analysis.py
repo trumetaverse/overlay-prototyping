@@ -1,27 +1,28 @@
-from zipfile import ZipFile
-from io import StringIO
-from multiprocessing.managers import BaseManager
-from multiprocessing import Pool, TimeoutError, Queue, Manager, Lock
-import os, copy, time, copy, collections
-# from findstructs import FindStructs
-from bitstring import ConstBitStream
+import collections
 import struct
-from jvm_objects import VMStructEntry, CollectedHeap, GCLog, ClassLoaderData
-from jvm_symboltable import SymbolTable, Symbol
-from jvm_stringtable import StringTable
-from jvm_systemdictionary import Dictionary
-from jvm_klass import get_klass_info, KlassInstance, Klass, ObjArrayKlass, TypeArrayKlass, \
-    restrict_klass_parsing, ArrayKlass
-from jvm_meta import Method, CPCache
-from jvm_klassoop import Oop, ObjArrayKlassOop
-from jvm_base import BaseOverlay
-from jvm_entry_offsets import VERSION_OFFSET, DICTIONARY, SHAREDHEAP, \
-    SHAREDDICTIONARY, COLLECTEDHEAP, SYMBOLTABLE, \
-    STRINGTABLE, PLACEHOLDERS
 # from jvm_klassoop import KlassOop, ArrayKlassOop, ObjArrayKlassOop,\
 #                         TypeArrayKlassOop, Oop
 # import BaseException
 from datetime import datetime
+from io import StringIO
+from multiprocessing import Pool
+from zipfile import ZipFile
+
+# from findstructs import FindStructs
+from bitstring import ConstBitStream
+
+from jvm_base import BaseOverlay
+from jvm_entry_offsets import VERSION_OFFSET, DICTIONARY, SHAREDHEAP, \
+    SHAREDDICTIONARY, COLLECTEDHEAP, SYMBOLTABLE, \
+    STRINGTABLE, PLACEHOLDERS
+from jvm_klass import get_klass_info, KlassInstance, Klass, ObjArrayKlass, TypeArrayKlass, \
+    restrict_klass_parsing, ArrayKlass
+from jvm_klassoop import Oop, ObjArrayKlassOop
+from jvm_meta import Method, CPCache
+from jvm_objects import VMStructEntry, CollectedHeap, GCLog, ClassLoaderData
+from jvm_stringtable import StringTable
+from jvm_symboltable import SymbolTable, Symbol
+from jvm_systemdictionary import Dictionary
 
 
 def time_str():
@@ -118,7 +119,7 @@ def impl_par_scan_page_for_bci_addrs(arg_items):
     value_range_locs[baddr] = []
     pos = offset
     log_no_recoop("Scanning chunk: 0x%08x with %d values with %d constraints" % (
-    baddr + offset, len(vals), len(bci_ranges_constraint)))
+        baddr + offset, len(vals), len(bci_ranges_constraint)))
     found_vals = dict([(i, 0) for i in set(method_mapping.values())])
     for val in vals:
         m = None
@@ -134,7 +135,7 @@ def impl_par_scan_page_for_bci_addrs(arg_items):
     }
     all_vals = found_vals.values()
     log_no_recoop("Completed scanning chunk: 0x%08x.  Found %d values, %d unique" % (
-    baddr + offset, len(all_vals), sum(all_vals)))
+        baddr + offset, len(all_vals), sum(all_vals)))
     return [baddr, dict_values]
 
 
@@ -162,7 +163,7 @@ def par_scan_page_for_bci_addrs(bci_ranges, bci_ranges_constraint, num_procs=20,
     for vals in pool_map_results:
         baddr, res = vals
         log_no_recoop("Master Proc: Processed %d ranges: Reading values chunk: 0x%08x with %d values" % (
-        required_items, baddr, len(res['value_range_locs'][baddr])))
+            required_items, baddr, len(res['value_range_locs'][baddr])))
         required_items += 1
         _value_range_locs = res['value_range_locs']
         for baddr, lst_addr_val_tup in _value_range_locs.items():
@@ -252,7 +253,7 @@ def impl_par_scan_page_for_dword_values(arg_items):
 
     all_vals = found_vals.values()
     log_no_recoop("Completed scanning chunk: 0x%08x.  Found %d values, %d unique" % (
-    baddr + offset, len(all_vals), sum(all_vals)))
+        baddr + offset, len(all_vals), sum(all_vals)))
     # log_no_recoop("Returning values chunk: 0x%08x with %d values"%(baddr, r.fsize/4))
     dict_values = {
         'value_addr_locs': value_addr_locs,
@@ -310,7 +311,7 @@ def par_scan_page_for_dword_values(_ranges, values, num_procs=20, max_send=66662
 
         baddr, res = vals
         log_no_recoop("Master Proc: Processed %d ranges: Reading values chunk: 0x%08x with %d values" % (
-        required_items, baddr, len(res['value_range_locs'][baddr])))
+            required_items, baddr, len(res['value_range_locs'][baddr])))
         required_items += 1
         # value_addr_locs.update(res['value_addr_locs'])
         _value_addr_locs = res['value_addr_locs']
@@ -2685,7 +2686,6 @@ class JVMAnalysis(object):
             klass_holder.add_method_value(name, idnum, method)
 
     def correct_klasses(self):
-        import operator
         # find a method clas
         # 1) Group vtables by name and value
         # 2) vtables with the most names and values get the "win"

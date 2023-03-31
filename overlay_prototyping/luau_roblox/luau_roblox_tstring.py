@@ -1,8 +1,16 @@
-
-from ..base import *
-from . luau_roblox_base import LuauRobloxBase
-from . luau_roblox_overlay import LUAUR_TSTRING
 import struct
+
+from .consts import LUAR_ROBLOX_BASE_FUNCS, LUAR_ROBLOX_TYPES, LUAR_ROBLOX_EVENT_NAMES
+from .luau_roblox_base import LuauRobloxBase
+from .luau_roblox_overlay import LUAUR_TSTRING, LuauRW_TString
+from ..base import *
+
+
+class LuauRobloxTstringC(LuauRW_TString):
+    def __init__(self, **kargs):
+        self._value = None
+        super(LuauRobloxTstring, self).__init__(**kargs)
+        self.value = kargs.get('value', None)
 
 
 class LuauRobloxTstring(LuauRobloxBase):
@@ -18,8 +26,14 @@ class LuauRobloxTstring(LuauRobloxBase):
     _TYPE = 0x05
 
     def __init__(self, **kargs):
-        for k,v in kargs.items():
-            setattr(self, k, v)
+        self.value = None
+        super(LuauRobloxTstring, self).__init__(**kargs)
+        self.value = kargs.get('value', None)
+        # for k,v in kargs.items():
+        #     setattr(self, k, v)
+
+    def probably_valid_string(self):
+        return self.value is not None and len(str(self.value)) > 0
 
     def is_klass_prim(self):
         return True
@@ -42,8 +56,8 @@ class LuauRobloxTstring(LuauRobloxBase):
     def get_dump(self, unpacked_values=None):
         dump_data = super(LuauRobloxTstring, self).get_dump()
         data_addr = self.end + 4 if self.is_32bit else self.end + 8
-        dump_data[data_addr] = {'name':'data',
-              'type': 'char[]', 'value': self.value}
+        dump_data[data_addr] = {'name': 'data',
+                                'type': 'char[]', 'value': self.value}
         return dump_data
 
     def update_fields(self, force_update=False):
@@ -58,9 +72,9 @@ class LuauRobloxTstring(LuauRobloxBase):
     def python_value(self, bread_crumbs={}, **kargs):
         v = self.raw_value()
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -71,22 +85,24 @@ class LuauRobloxTstring(LuauRobloxBase):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, nbytes, analysis=None, is_32bit=False):
         if not LuauRobloxBase.check_gc_header(nbytes):
             return None
-        kargs = { "addr":addr, "updated":False, 'analysis':analysis,
-                  "type":cls._name, 'is_32bit': is_32bit}
+        kargs = {"addr": addr, "updated": False, 'analysis': analysis,
+                 "type": cls._name, 'is_32bit': is_32bit}
         fmt = cls.bits32
         sz = cls.struct_size(is_32bit)
+        if len(nbytes) < sz:
+            return None
         data_unpack = struct.unpack(fmt, nbytes[:sz])
         nfields = cls.named32 if is_32bit else cls.named64
         name_fields(data_unpack, nfields, fields=kargs)
         pad = kargs['end'] % 8 if kargs['end'] % 8 != 0 else 4 if is_32bit else 8
-        str_len = kargs['end'] - (addr + sz ) + 4 if is_32bit else 8
-        kargs['value'] = "".join([chr(x) for x in nbytes[sz:sz+str_len]])
+        str_len = kargs['end'] - (addr + sz) + 4 if is_32bit else 8
+        kargs['value'] = "".join([chr(x) for x in nbytes[sz:sz + str_len]])
         kargs['data'] = kargs['value']
         kargs['str_len'] = str_len
         kargs['lua_sz'] = str_len + sz + pad
@@ -99,8 +115,19 @@ class LuauRobloxTstring(LuauRobloxBase):
         sz = cls.struct_size(is_32bit)
         if offset:
             fobj.seek(offset)
-        nbytes = fobj.read(sz+8096)
+        nbytes = fobj.read(sz + 8096)
         tstring = cls.from_bytes(addr, nbytes, analysis, is_32bit=is_32bit)
         setattr(tstring, 'raw_bytes', nbytes)
         return tstring
 
+    def is_string(self):
+        return True
+
+    def is_base_func_name(self):
+        return str(self.value) in LUAR_ROBLOX_BASE_FUNCS
+
+    def is_event_name(self):
+        return str(self.value) in LUAR_ROBLOX_EVENT_NAMES
+
+    def is_base_type_name(self):
+        return str(self.value) in LUAR_ROBLOX_TYPES
