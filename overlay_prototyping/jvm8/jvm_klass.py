@@ -1,77 +1,75 @@
 import struct
 
-from jvm_overlays import KLASS_TYPE, INSTANCE_KLASS_TYPE, ARRAY_KLASS_TYPE, \
-                OBJ_ARRAY_KLASS_TYPE, TYPE_ARRAY_KLASS_TYPE,\
-                KLASS_TYPE_WIN, INSTANCE_KLASS_TYPE_WIN, ARRAY_KLASS_TYPE_WIN, \
-                OBJ_ARRAY_KLASS_TYPE_WIN, TYPE_ARRAY_KLASS_TYPE_WIN
-
-from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
-                         get_named_array64, get_field_types, name_fields,\
-                         get_klass, get_sym, get_meta, resolve_syms,\
-                         resolve_syms, get_size32, get_size64,\
-                         get_named_types_tup_list
-
-from jvm_templates import ArrayT, ARRAY_MAP
-from jvm_meta import ConstantPool
 from jvm_base import BaseOverlay
-
+from jvm_meta import ConstantPool
+from jvm_overlays import KLASS_TYPE, INSTANCE_KLASS_TYPE, ARRAY_KLASS_TYPE, \
+    OBJ_ARRAY_KLASS_TYPE, TYPE_ARRAY_KLASS_TYPE, \
+    KLASS_TYPE_WIN, INSTANCE_KLASS_TYPE_WIN, ARRAY_KLASS_TYPE_WIN, \
+    OBJ_ARRAY_KLASS_TYPE_WIN, TYPE_ARRAY_KLASS_TYPE_WIN
+from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
+    get_named_array64, get_field_types, name_fields, \
+    get_klass, get_sym, get_meta, resolve_syms, get_size32, get_size64, \
+    get_named_types_tup_list
+from jvm_templates import ArrayT, ARRAY_MAP
 
 RESTRICT_CLASS_PARSING = False
 BASIC_TYPE_INFO = {
-  'T_BOOLEAN': 4, 'T_CHAR': 5, 'T_FLOAT': 6, 'T_DOUBLE': 7, 'T_BYTE': 8,
-  'T_SHORT': 9, 'T_INT':10, 'T_LONG':11, 'T_OBJECT':12, 'T_ARRAY':13,
-  'T_VOID':14, 'T_ADDRESS':15, 'T_NARROWOOP':16, 'T_CONFLICT':17,
-  'T_ILLEGAL':99,
-  4:"T_BOOLEAN", 5:"T_CHAR", 6:"T_FLOAT", 7:"T_DOUBLE", 8:"T_BYTE",
-  9:"T_SHORT", 10:"T_INT", 11:"T_LONG", 12:"T_OBJECT", 13:"T_ARRAY",
-  14:"T_VOID", 15:"T_ADDRESS", 16:"T_NARROWOOP", 17:"T_CONFLICT",
-  99:"T_ILLEGAL",
+    'T_BOOLEAN': 4, 'T_CHAR': 5, 'T_FLOAT': 6, 'T_DOUBLE': 7, 'T_BYTE': 8,
+    'T_SHORT': 9, 'T_INT': 10, 'T_LONG': 11, 'T_OBJECT': 12, 'T_ARRAY': 13,
+    'T_VOID': 14, 'T_ADDRESS': 15, 'T_NARROWOOP': 16, 'T_CONFLICT': 17,
+    'T_ILLEGAL': 99,
+    4: "T_BOOLEAN", 5: "T_CHAR", 6: "T_FLOAT", 7: "T_DOUBLE", 8: "T_BYTE",
+    9: "T_SHORT", 10: "T_INT", 11: "T_LONG", 12: "T_OBJECT", 13: "T_ARRAY",
+    14: "T_VOID", 15: "T_ADDRESS", 16: "T_NARROWOOP", 17: "T_CONFLICT",
+    99: "T_ILLEGAL",
 }
-INLINE_PRIMITIVES_KLASSES = [ 'B', 'C', 'D', 'F', 'I', 'J', 'S', 'Z',]
+INLINE_PRIMITIVES_KLASSES = ['B', 'C', 'D', 'F', 'I', 'J', 'S', 'Z', ]
 
-PRIMITIVES_KLASSES = [ 'B', 'C', 'D', 'F', 'I', 'J', 'S', 'Z',
-#    '[B', '[C', '[D', '[F', '[I', '[J', '[S', '[Z',
-#    'java/lang/Byte',
-#    'java/lang/Character',
-#    'java/lang/Double',
-#    'java/lang/Float',
-#    'java/lang/Integer',
-#    'java/lang/Long',
-#    'java/lang/Short',
-#    'java/lang/Boolean',
-]
+PRIMITIVES_KLASSES = ['B', 'C', 'D', 'F', 'I', 'J', 'S', 'Z',
+                      #    '[B', '[C', '[D', '[F', '[I', '[J', '[S', '[Z',
+                      #    'java/lang/Byte',
+                      #    'java/lang/Character',
+                      #    'java/lang/Double',
+                      #    'java/lang/Float',
+                      #    'java/lang/Integer',
+                      #    'java/lang/Long',
+                      #    'java/lang/Short',
+                      #    'java/lang/Boolean',
+                      ]
 
 PRIMITIVES_KLASSES_SET = set(PRIMITIVES_KLASSES)
 
 
-#FIELD_ACCESS = 0
-#FIELD_NAME = 0
-#FIELD_SIG = 0
-#FIELD_INITIAL_VAL = 0
-#FIELD_LOW_OFF = 0
-#FIELD_HIGH_OFF = 0
+# FIELD_ACCESS = 0
+# FIELD_NAME = 0
+# FIELD_SIG = 0
+# FIELD_INITIAL_VAL = 0
+# FIELD_LOW_OFF = 0
+# FIELD_HIGH_OFF = 0
 
 def is_restrict_klass_parsing(flag=True):
     global RESTRICT_CLASS_PARSING
     return RESTRICT_CLASS_PARSING
 
+
 def restrict_klass_parsing(flag=True):
     global RESTRICT_CLASS_PARSING
     RESTRICT_CLASS_PARSING = flag
+
 
 def get_klass_info(addr, analysis):
     # check the klass and extract key info to determine
     # how the oop should dispatch the remainder of its
     # parsing at the given address
-    res = {'name':'', 'is_meta':False, 'is_instance':False,
-           'is_array':False, 'is_oop_array':False,
-           'basic_type':None, 'basic_type_sz':0, 'is_prim':False,
-           'prim_value':None, 'is_klass':False,
-    }
+    res = {'name': '', 'is_meta': False, 'is_instance': False,
+           'is_array': False, 'is_oop_array': False,
+           'basic_type': None, 'basic_type_sz': 0, 'is_prim': False,
+           'prim_value': None, 'is_klass': False,
+           }
     fmt = Klass.bits32 if analysis.is_32bit else Klass.bits64
     nfields = Klass.named32 if jvm_analysis.is_32bit else Klass.named64
-    sz = Klass.size32 if jvm_analysis.is_32bit else\
-         Klass.size64
+    sz = Klass.size32 if jvm_analysis.is_32bit else \
+        Klass.size64
     nbytes = jvm_analysis.read(addr, sz)
     kargs = {}
     if nbytes is None:
@@ -79,8 +77,8 @@ def get_klass_info(addr, analysis):
     data_unpack = struct.unpack(fmt, nbytes)
     name_fields(data_unpack, nfields, fields=kargs)
     raw_bytes = nbytes[4:8] if jvm_analysis.is_32bit else nbytes[8:0xC]
-    esz, ebt, hsz, tag  = struct.unpack("4B",raw_bytes)
-    layout, = struct.unpack("<I",raw_bytes)
+    esz, ebt, hsz, tag = struct.unpack("4B", raw_bytes)
+    layout, = struct.unpack("<I", raw_bytes)
     res['tag'] = tag
     res['esz'] = esz
     res['ebt'] = ebt
@@ -96,7 +94,7 @@ def get_klass_info(addr, analysis):
         res['name'] = str(sym)
         res['is_instance'] = True
         res['is_klass'] = True
-        #res['is_array'] = True if res['name'].find('[') == 0 else False
+        # res['is_array'] = True if res['name'].find('[') == 0 else False
 
     res['is_prim'] = res['name'].strip('[') in PRIMITIVES_KLASSES_SET
     if res['is_prim']:
@@ -104,14 +102,14 @@ def get_klass_info(addr, analysis):
 
     if (tag & 0x80) > 0 or (tag & 0xC0) > 0:
         res['basic_type'] = ebt
-        res['basic_type_sz'] = esz**2
+        res['basic_type_sz'] = esz ** 2
         res['is_oop_array'] = (tag & 0x80) == 0x80
         res['is_array'] = True
         res['is_klass'] = True
         res['is_type_array'] = (tag & 0xC0) == 0xc0
 
-
     return res
+
 
 class Klass(BaseOverlay):
     _name = "Klass"
@@ -129,7 +127,7 @@ class Klass(BaseOverlay):
         cls.reset_overlay(KLASS_TYPE_WIN)
 
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def set_fields_value(self, typ='Array<u2>*'):
@@ -144,7 +142,7 @@ class Klass(BaseOverlay):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "Unknown class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "Unknown class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def update_fields(self, force_update=False):
         # do this after reading in all the classes to prevent
@@ -158,7 +156,7 @@ class Klass(BaseOverlay):
         name_value = getattr(self, 'name_value', None)
         self.set_fields_value()
         overlay = getattr(self, '_overlay')
-        #getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
+        # getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
         named_typs = get_named_types_tup_list(overlay)
         for name, typ in named_typs:
             if typ.find("Klass") == 0:
@@ -169,17 +167,17 @@ class Klass(BaseOverlay):
                     klass = get_klass(jva, addr)
                     if klass:
                         klass.update_fields()
-                        #getattr(self, "jvm_analysis").log ("Resolved klass field: %s  0x%08x %s"%(name, addr, str(klass.name_value)))
-                setattr(self, name+'_value', klass)
+                        # getattr(self, "jvm_analysis").log ("Resolved klass field: %s  0x%08x %s"%(name, addr, str(klass.name_value)))
+                setattr(self, name + '_value', klass)
             elif typ.find("Symbol*") == 0:
                 # attempt to resolve the type
                 addr = getattr(self, name, None)
-                setattr(self, name+'_value', get_sym(jva, addr))
+                setattr(self, name + '_value', get_sym(jva, addr))
             elif typ.find("Array") == 0:
                 addr = getattr(self, name, None)
                 if addr:
                     ary = ArrayT.get_array(addr, jva, typ)
-                    setattr(self, name+'_value', ary)
+                    setattr(self, name + '_value', ary)
                     if ary and typ.find("Klass") > -1:
                         for a in ary.elem:
                             if a:
@@ -188,24 +186,23 @@ class Klass(BaseOverlay):
         self.populate_class_field_info()
         self.set_klass_dependencies()
 
-
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        #getattr(self, "jvm_analysis").log (hex(addr), len(bytes), Klass.bits32, Klass.size32)
+        # getattr(self, "jvm_analysis").log (hex(addr), len(bytes), Klass.bits32, Klass.size32)
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         jva = jvm_analysis
         # doing this as a sanity check all Klasses and Oops happen on 8 byte boundary
         if addr % 8 != 0:
-            jvm_analysis.log ("Attempting to read a klass off of an 8-byte value @ 0x%08x"%(addr))
+            jvm_analysis.log("Attempting to read a klass off of an 8-byte value @ 0x%08x" % (addr))
             return None
 
         if _bytes is None:
             return None
         if jvm_analysis.has_klass(addr):
             return jvm_analysis.lookup_known_klass(addr)
-        klass_info = get_klass_info (addr, jvm_analysis)
-        #jvm_analysis.log (klass_info)
+        klass_info = get_klass_info(addr, jvm_analysis)
+        # jvm_analysis.log (klass_info)
         if klass_info['is_array']:
             if klass_info['is_oop_array']:
                 return ObjArrayKlass.from_jva(addr, jva)
@@ -214,11 +211,12 @@ class Klass(BaseOverlay):
         elif not RESTRICT_CLASS_PARSING and klass_info['is_instance']:
             return KlassInstance.from_jva(addr, jva)
         elif RESTRICT_CLASS_PARSING:
-            raise Exception("Klass parsing has been restricted, set jvm_klass.RESTRICT_CLASS_PARSING=False to re-enable")
+            raise Exception(
+                "Klass parsing has been restricted, set jvm_klass.RESTRICT_CLASS_PARSING=False to re-enable")
 
-        kargs = {"addr":addr, "jvm_analysis":jvm_analysis, 'updated':False,
-                 "ooptype":'klassOop', 'metatype':'',
-                 'klasstype':'Klass', 'is_32bit':jvm_analysis.is_32bit}
+        kargs = {"addr": addr, "jvm_analysis": jvm_analysis, 'updated': False,
+                 "ooptype": 'klassOop', 'metatype': '',
+                 'klasstype': 'Klass', 'is_32bit': jvm_analysis.is_32bit}
         data_unpack = struct.unpack(fmt, _bytes)
         name_fields(data_unpack, nfields, fields=kargs)
 
@@ -227,19 +225,19 @@ class Klass(BaseOverlay):
         elif jva:
             resolve_syms(Klass.types, Klass.named64, jvm_analysis, kargs)
 
-        tag  = klass_info['tag']
-        esz  = klass_info['esz']
-        ebt  = klass_info['ebt']
-        hsz  = klass_info['hsz']
+        tag = klass_info['tag']
+        esz = klass_info['esz']
+        ebt = klass_info['ebt']
+        hsz = klass_info['hsz']
         kargs['method_values'] = {}
         kargs['method_values_by_name'] = {}
         kargs['tag'] = tag
-        kargs['element_sz'] = esz**2
+        kargs['element_sz'] = esz ** 2
         kargs['header_sz'] = hsz
         kargs['element_type'] = ebt
         kargs['element_type_str'] = BASIC_TYPE_INFO[ebt] \
-                                    if ebt in BASIC_TYPE_INFO else\
-                                    "Unknown"
+            if ebt in BASIC_TYPE_INFO else \
+            "Unknown"
         kargs['subklass_value'] = None
         kargs['java_mirror_value'] = None
         kargs['secondary_supers_value'] = None
@@ -249,12 +247,13 @@ class Klass(BaseOverlay):
         # debugging
         kargs['unpacked_values'] = data_unpack
         d = Klass(**kargs)
-        #jvm_analysis.log ("Identified %s @ 0x%08x"%(str(d.name), addr))
+        # jvm_analysis.log ("Identified %s @ 0x%08x"%(str(d.name), addr))
 
         if jvm_analysis:
             jvm_analysis.add_klass(d, check_vtable=True)
-        #d.update_klasses(jvm_analysis)
+        # d.update_klasses(jvm_analysis)
         return d
+
 
 class KlassInstance(BaseOverlay):
     _name = "KlassInstance"
@@ -272,14 +271,14 @@ class KlassInstance(BaseOverlay):
         cls.reset_overlay(INSTANCE_KLASS_TYPE_WIN)
 
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "Unknown class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "Unknown class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def update_methods(self):
         self.set_constant_pool()
@@ -300,7 +299,6 @@ class KlassInstance(BaseOverlay):
             setattr(self, 'fields_value', ary)
             self.populate_class_field_info()
 
-
     def update_fields(self, force_update=False):
         # do this after reading in all the classes to prevent
         # circular dependencies
@@ -313,12 +311,12 @@ class KlassInstance(BaseOverlay):
         addr = getattr(self, "addr")
         name_value = getattr(self, 'name_value', None)
         overlay = getattr(self, '_overlay')
-        #getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
+        # getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
 
         named_typs = get_named_types_tup_list(overlay)
-        #getattr(self, "jvm_analysis").log ("Updating fields fpr %s"%(self.name_value))
+        # getattr(self, "jvm_analysis").log ("Updating fields fpr %s"%(self.name_value))
         for name, typ in named_typs:
-            #getattr(self, "jvm_analysis").log ("Attempting to update field: %s of type: %s"%(name, typ))
+            # getattr(self, "jvm_analysis").log ("Attempting to update field: %s of type: %s"%(name, typ))
             if typ.find("Klass") == 0:
                 # attempt to resolve the type
                 addr = getattr(self, name, None)
@@ -327,22 +325,22 @@ class KlassInstance(BaseOverlay):
                     try:
                         klass = get_klass(jva, addr)
                     except:
-                        em = "Failed to update %s %s in %s @ 0x%08x"%(typ, name, str(self), addr)
-                        getattr(self, "jvm_analysis").log (em)
+                        em = "Failed to update %s %s in %s @ 0x%08x" % (typ, name, str(self), addr)
+                        getattr(self, "jvm_analysis").log(em)
                     if klass:
-                        #getattr(self, "jvm_analysis").log ("Updating klass: %s @0x%08x"%(str(klass), klass.addr))
+                        # getattr(self, "jvm_analysis").log ("Updating klass: %s @0x%08x"%(str(klass), klass.addr))
                         klass.update_fields()
-                    setattr(self, name+'_value', klass)
+                    setattr(self, name + '_value', klass)
             elif typ.find("Symbol*") == 0:
                 # attempt to resolve the type
                 addr = getattr(self, name, None)
                 if addr:
-                    setattr(self, name+'_value', get_sym(jva, addr))
+                    setattr(self, name + '_value', get_sym(jva, addr))
             elif typ.find("Array") == 0:
                 addr = getattr(self, name, None)
                 if addr:
                     ary = ArrayT.get_array(addr, jva, typ)
-                    setattr(self, name+'_value', ary)
+                    setattr(self, name + '_value', ary)
                     if ary and typ.find("Klass") > -1:
                         for a in ary.elem:
                             if a:
@@ -355,13 +353,13 @@ class KlassInstance(BaseOverlay):
         return True
 
     def set_constant_pool(self):
-        #getattr(self, "jvm_analysis").log ("Updating CP for %s"%str(self))
+        # getattr(self, "jvm_analysis").log ("Updating CP for %s"%str(self))
         klass_name = getattr(self, 'name_value', None)
         if klass_name is None:
             addr = getattr(self, 'addr')
-            getattr(self, "jvm_analysis").log ("Error BUG: not a valid instance klass @ 0x%08x"%addr)
-            raise BaseException ("Not a valid instance class")
-            #return None
+            getattr(self, "jvm_analysis").log("Error BUG: not a valid instance klass @ 0x%08x" % addr)
+            raise BaseException("Not a valid instance class")
+            # return None
 
         addr = getattr(self, "constants", None)
         jva = getattr(self, "jvm_analysis", None)
@@ -370,8 +368,8 @@ class KlassInstance(BaseOverlay):
             cp = get_meta(jva, addr, ConstantPool)
             if cp:
                 cp.update_fields()
-                #kname = str(cp.pool_holder_value)
-                #getattr(self, "jvm_analysis").log ("Resolved constant pool (0x%08x) field for: %s"%(addr, kname)) setattr(self, 'constants_value', cp)
+                # kname = str(cp.pool_holder_value)
+                # getattr(self, "jvm_analysis").log ("Resolved constant pool (0x%08x) field for: %s"%(addr, kname)) setattr(self, 'constants_value', cp)
             setattr(self, 'constants_value', cp)
         else:
             setattr(self, 'constants_value', None)
@@ -379,7 +377,7 @@ class KlassInstance(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        #getattr(self, "jvm_analysis").log (hex(addr), len(bytes), fmt)
+        # getattr(self, "jvm_analysis").log (hex(addr), len(bytes), fmt)
         jva = jvm_analysis
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
@@ -389,17 +387,17 @@ class KlassInstance(BaseOverlay):
 
         # doing this as a sanity check all Klasses and Oops happen on 8 byte boundary
         if addr % 8 != 0:
-            jvm_analysis.log ("Attempting to read a klass off of an 8-byte value @ 0x%08x"%(addr))
+            jvm_analysis.log("Attempting to read a klass off of an 8-byte value @ 0x%08x" % (addr))
             return None
-        kargs = {"addr":addr, "jvm_analysis":jvm_analysis,
-                'updated':False,'ooptype':'instanceKlassOop',
-                 'metatype':'', 'klasstype':'instanceKlass','field_info':{},
-                 'is_32bit':jvm_analysis.is_32bit }
+        kargs = {"addr": addr, "jvm_analysis": jvm_analysis,
+                 'updated': False, 'ooptype': 'instanceKlassOop',
+                 'metatype': '', 'klasstype': 'instanceKlass', 'field_info': {},
+                 'is_32bit': jvm_analysis.is_32bit}
         data_unpack = struct.unpack(fmt, _bytes)
         if kargs.get('name', 0) > 0 and jvm_analysis:
             sym = jvm_analysis.lookup_internal_symbol_only(kargs['name'])
             if sym:
-                pass#getattr(self, "jvm_analysis").log ("Processing InstanceKlass: %s at 0x%08x"%(str(sym), addr) )
+                pass  # getattr(self, "jvm_analysis").log ("Processing InstanceKlass: %s at 0x%08x"%(str(sym), addr) )
             else:
                 return None
 
@@ -410,24 +408,24 @@ class KlassInstance(BaseOverlay):
             resolve_syms(KlassInstance.types, KlassInstance.named64, jvm_analysis, kargs)
 
         raw_bytes = _bytes[4:8] if jvm_analysis.is_32bit else _bytes[8:0xC]
-        esz, ebt, hsz, tag  = struct.unpack("4B",raw_bytes)
+        esz, ebt, hsz, tag = struct.unpack("4B", raw_bytes)
         kargs['method_values'] = {}
         kargs['method_values_by_name'] = {}
         kargs['tag'] = tag
-        kargs['element_sz'] = esz**2
+        kargs['element_sz'] = esz ** 2
         kargs['header_sz'] = hsz
         kargs['element_type'] = ebt
         kargs['element_type_str'] = BASIC_TYPE_INFO[ebt] \
-                                    if ebt in BASIC_TYPE_INFO else\
-                                    "Unknown"
+            if ebt in BASIC_TYPE_INFO else \
+            "Unknown"
         kargs['unpacked_values'] = data_unpack
         d = KlassInstance(**kargs)
         # dont update constant pool yet
         # still not accounting for all the other meta klasses
-        #d.set_constant_pool()
+        # d.set_constant_pool()
         if jvm_analysis:
             jvm_analysis.add_klass(d, check_vtable=True)
-        #d.update_klasses(jvm_analysis)
+        # d.update_klasses(jvm_analysis)
         return d
 
 
@@ -447,14 +445,14 @@ class ObjArrayKlass(BaseOverlay):
         cls.reset_overlay(OBJ_ARRAY_KLASS_TYPE_WIN)
 
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "Unknown class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "Unknown class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def is_instance_array(self):
         return True
@@ -467,12 +465,12 @@ class ObjArrayKlass(BaseOverlay):
         if self.is_updated(force_update):
             return
         setattr(self, "updated", True)
-        #getattr(self, "jvm_analysis").log ("Updating %s force_update=%s"%(str(self), force_update))
+        # getattr(self, "jvm_analysis").log ("Updating %s force_update=%s"%(str(self), force_update))
         name = getattr(self, "_name")
         addr = getattr(self, "addr")
         name_value = getattr(self, 'name_value', None)
         overlay = getattr(self, '_overlay')
-        #getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
+        # getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
         named_typs = get_named_types_tup_list(overlay)
         for name, typ in named_typs:
             if typ.find("Klass*") == 0:
@@ -481,24 +479,24 @@ class ObjArrayKlass(BaseOverlay):
                 if addr:
                     klass = get_klass(jva, addr)
                     if klass:
-                        pass#getattr(self, "jvm_analysis").log ("Resolved klass field: %s  0x%08x %s"%(name, addr, str(klass.name_value)))
-                    setattr(self, name+'_value', klass)
+                        pass  # getattr(self, "jvm_analysis").log ("Resolved klass field: %s  0x%08x %s"%(name, addr, str(klass.name_value)))
+                    setattr(self, name + '_value', klass)
             elif typ.find("Symbol*") == 0:
                 # attempt to resolve the type
                 addr = getattr(self, name, None)
                 if addr:
-                    setattr(self, name+'_value', get_sym(jva, addr))
+                    setattr(self, name + '_value', get_sym(jva, addr))
             elif typ.find("Array") == 0:
                 addr = getattr(self, name, None)
                 if addr:
                     ary = ArrayT.get_array(addr, jva, typ)
-                    setattr(self, name+'_value', ary)
+                    setattr(self, name + '_value', ary)
                     if ary and typ.find("Klass") > -1:
                         for a in ary.elem:
                             if a:
                                 a.update_fields(force_update=force_update)
 
-    #def set_constant_pool (self):
+    # def set_constant_pool (self):
     #     addr = getattr(self, "constants", None)
     #     jva = getattr(self, "jvm_analysis", None)
     #     cp = None
@@ -513,7 +511,7 @@ class ObjArrayKlass(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        #getattr(self, "jvm_analysis").log (hex(addr), len(bytes), fmt)
+        # getattr(self, "jvm_analysis").log (hex(addr), len(bytes), fmt)
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         sz = cls.size32 if jvm_analysis.is_32bit else cls.size64
@@ -522,13 +520,13 @@ class ObjArrayKlass(BaseOverlay):
             return jvm_analysis.lookup_known_klass(addr)
 
         if _bytes is None or len(_bytes) != sz:
-            #getattr(self, "jvm_analysis").log("Bytes size do not match required needed at addr 0x%08x"%addr)
+            # getattr(self, "jvm_analysis").log("Bytes size do not match required needed at addr 0x%08x"%addr)
             return None
 
-        kargs = {"addr":addr, "jvm_analysis":jvm_analysis,
-                'updated':False,"ooptype":'objArrayKlassOop',
-                'metatype':'', 'klasstype':'objArrayKlass',
-                'is_32bit':jvm_analysis.is_32bit}
+        kargs = {"addr": addr, "jvm_analysis": jvm_analysis,
+                 'updated': False, "ooptype": 'objArrayKlassOop',
+                 'metatype': '', 'klasstype': 'objArrayKlass',
+                 'is_32bit': jvm_analysis.is_32bit}
         data_unpack = struct.unpack(fmt, _bytes)
         name_fields(data_unpack, nfields, fields=kargs)
 
@@ -537,7 +535,7 @@ class ObjArrayKlass(BaseOverlay):
         if kargs.get('name', 0) > 0 and jvm_analysis:
             sym = jvm_analysis.lookup_internal_symbol_only(kargs['name'])
             if sym:
-                pass#getattr(self, "jvm_analysis").log ("Processing ObjArrayKlass: %s at 0x%08x"%(str(sym), addr))
+                pass  # getattr(self, "jvm_analysis").log ("Processing ObjArrayKlass: %s at 0x%08x"%(str(sym), addr))
             else:
                 return None
 
@@ -545,20 +543,19 @@ class ObjArrayKlass(BaseOverlay):
             resolve_syms(cls.types, cls.named32, jvm_analysis, kargs)
         elif jva:
             resolve_syms(cls.types, cls.named64, jvm_analysis, kargs)
-        #_layout helper bytes
+        # _layout helper bytes
         raw_bytes = _bytes[4:8] if jvm_analysis.is_32bit else _bytes[8:0xC]
-        esz, ebt, hsz, tag  = struct.unpack("4B",raw_bytes)
+        esz, ebt, hsz, tag = struct.unpack("4B", raw_bytes)
         kargs['header_sz'] = hsz
-        kargs['element_sz'] = esz**2
+        kargs['element_sz'] = esz ** 2
         kargs['tag'] = tag
         kargs['element_type'] = ebt
         kargs['element_type_str'] = BASIC_TYPE_INFO[ebt] \
-                                    if ebt in BASIC_TYPE_INFO else\
-                                    "Unknown"
+            if ebt in BASIC_TYPE_INFO else \
+            "Unknown"
 
-
-        #num_elements = 2 ** (_layout_helper &0x000000FF)
-        #kargs['num_elements'] = num_elements
+        # num_elements = 2 ** (_layout_helper &0x000000FF)
+        # kargs['num_elements'] = num_elements
         kargs['element_are_oop'] = tag & 0x80 == 0x80
 
         kargs['next_sibling_value'] = None
@@ -578,8 +575,9 @@ class ObjArrayKlass(BaseOverlay):
         d = ObjArrayKlass(**kargs)
         if jvm_analysis:
             jvm_analysis.add_klass(d, check_vtable=True)
-        #d.update_klasses(jvm_analysis)
+        # d.update_klasses(jvm_analysis)
         return d
+
 
 class TypeArrayKlass(BaseOverlay):
     _name = "TypeArrayKlass"
@@ -597,14 +595,14 @@ class TypeArrayKlass(BaseOverlay):
         cls.reset_overlay(TYPE_ARRAY_KLASS_TYPE_WIN)
 
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "Unknown class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "Unknown class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def is_updated(self, force_update=False):
         if getattr(self, "updated", False) and not force_update:
@@ -622,7 +620,7 @@ class TypeArrayKlass(BaseOverlay):
         name = getattr(self, "_name")
         addr = getattr(self, "addr")
         overlay = getattr(self, '_overlay')
-        #getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
+        # getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
         named_typs = get_named_types_tup_list(overlay)
         for name, typ in named_typs:
             if typ.find("Klass*") == 0:
@@ -631,18 +629,18 @@ class TypeArrayKlass(BaseOverlay):
                 if addr:
                     klass = get_klass(jva, addr)
                     if klass:
-                        pass#getattr(self, "jvm_analysis").log ("Resolved klass field: %s  0x%08x %s"%(name, addr, str(klass.name_value)))
-                    setattr(self, name+'_value', klass)
+                        pass  # getattr(self, "jvm_analysis").log ("Resolved klass field: %s  0x%08x %s"%(name, addr, str(klass.name_value)))
+                    setattr(self, name + '_value', klass)
             elif typ.find("Symbol*") == 0:
                 # attempt to resolve the type
                 addr = getattr(self, name, None)
                 if addr:
-                    setattr(self, name+'_value', get_sym(jva, addr))
+                    setattr(self, name + '_value', get_sym(jva, addr))
             elif typ.find("Array") == 0:
                 addr = getattr(self, name, None)
                 if addr:
                     ary = ArrayT.get_array(addr, jva, typ)
-                    setattr(self, name+'_value', ary)
+                    setattr(self, name + '_value', ary)
                     if ary and typ.find("Klass") > -1:
                         for a in ary.elem:
                             if a:
@@ -650,26 +648,25 @@ class TypeArrayKlass(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        #getattr(self, "jvm_analysis").log (hex(addr), len(bytes), fmt)
+        # getattr(self, "jvm_analysis").log (hex(addr), len(bytes), fmt)
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         jva = jvm_analysis
         if jvm_analysis and jvm_analysis.has_klass(addr):
             return jvm_analysis.lookup_known_klass(addr)
 
-        kargs = {"addr":addr, "jvm_analysis":jvm_analysis,
-                 'updated':False,"ooptype":'typeArrayKlassOop',
-                'metatype':'', 'klasstype':'typeArrayKlass',
-                'is_32bit':jvm_analysis.is_32bit}
+        kargs = {"addr": addr, "jvm_analysis": jvm_analysis,
+                 'updated': False, "ooptype": 'typeArrayKlassOop',
+                 'metatype': '', 'klasstype': 'typeArrayKlass',
+                 'is_32bit': jvm_analysis.is_32bit}
         data_unpack = struct.unpack(fmt, _bytes)
         name_fields(data_unpack, nfields, fields=kargs)
-        #if kargs.get('name', 0) > 0 and jvm_analysis:
+        # if kargs.get('name', 0) > 0 and jvm_analysis:
         #    sym = jvm_analysis.lookup_internal_symbol_only(kargs['name'])
         #    if sym:
         #        pass#getattr(self, "jvm_analysis").log ("Processing ArrayKlass: %s at 0x%08x"%(str(sym), addr))
         #    else:
         #        return None
-
 
         if jvm_analysis.is_32bit:
             resolve_syms(TypeArrayKlass.types, TypeArrayKlass.named32, jvm_analysis, kargs)
@@ -677,15 +674,15 @@ class TypeArrayKlass(BaseOverlay):
             resolve_syms(TypeArrayKlass.types, TypeArrayKlass.named64, jvm_analysis, kargs)
 
         raw_bytes = _bytes[4:8] if jvm_analysis.is_32bit else _bytes[8:0xC]
-        esz, ebt, hsz, tag  = struct.unpack("4B",raw_bytes)
+        esz, ebt, hsz, tag = struct.unpack("4B", raw_bytes)
         kargs['tag'] = tag
-        kargs['element_sz'] = esz**2
+        kargs['element_sz'] = esz ** 2
         kargs['tag'] = tag
         kargs['header_sz'] = hsz
         kargs['element_type'] = ebt
         kargs['element_type_str'] = BASIC_TYPE_INFO[ebt] \
-                                    if ebt in BASIC_TYPE_INFO else\
-                                    "Unknown"
+            if ebt in BASIC_TYPE_INFO else \
+            "Unknown"
 
         kargs['next_sibling_value'] = None
         kargs['secondary_supers_value'] = None
@@ -702,10 +699,11 @@ class TypeArrayKlass(BaseOverlay):
         d = TypeArrayKlass(**kargs)
         if jvm_analysis:
             jvm_analysis.add_klass(d, check_vtable=True)
-        #d.update_klasses(jvm_analysis)
+        # d.update_klasses(jvm_analysis)
         return d
 
-class ArrayKlass (BaseOverlay):
+
+class ArrayKlass(BaseOverlay):
     _name = "ArrayKlass"
     _overlay = ARRAY_KLASS_TYPE
     bits32 = get_bits32(ARRAY_KLASS_TYPE)
@@ -721,14 +719,14 @@ class ArrayKlass (BaseOverlay):
         cls.reset_overlay(ARRAY_KLASS_TYPE_WIN)
 
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "Unknown class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "Unknown class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def update_fields(self, force_update=False):
         # do this after reading in all the classes to prevent
@@ -741,7 +739,7 @@ class ArrayKlass (BaseOverlay):
         name = getattr(self, "_name")
         addr = getattr(self, "addr")
         overlay = getattr(self, '_overlay')
-        #getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
+        # getattr(self, "jvm_analysis").log ("Updating the fields for %s: 0x%08x  %s"%(name, addr, str(name_value)))
         named_typs = get_named_types_tup_list(overlay)
         for name, typ in named_typs:
             if typ.find("Klass*") == 0:
@@ -750,18 +748,18 @@ class ArrayKlass (BaseOverlay):
                 if addr:
                     klass = get_klass(jva, addr)
                     if klass:
-                        pass#getattr(self, "jvm_analysis").log ("Resolved klass field: %s  0x%08x %s"%(name, addr, str(klass.name_value)))
-                    setattr(self, name+'_value', klass)
+                        pass  # getattr(self, "jvm_analysis").log ("Resolved klass field: %s  0x%08x %s"%(name, addr, str(klass.name_value)))
+                    setattr(self, name + '_value', klass)
             elif typ.find("Symbol*") == 0:
                 # attempt to resolve the type
                 addr = getattr(self, name, None)
                 if addr:
-                    setattr(self, name+'_value', get_sym(jva, addr))
+                    setattr(self, name + '_value', get_sym(jva, addr))
             elif typ.find("Array") == 0:
                 addr = getattr(self, name, None)
                 if addr:
                     ary = ArrayT.get_array(addr, jva, typ)
-                    setattr(self, name+'_value', ary)
+                    setattr(self, name + '_value', ary)
                     if ary and typ.find("Klass") > -1:
                         for a in ary.elem:
                             if a:
@@ -769,26 +767,25 @@ class ArrayKlass (BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        #getattr(self, "jvm_analysis").log (hex(addr), len(bytes), fmt)
+        # getattr(self, "jvm_analysis").log (hex(addr), len(bytes), fmt)
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         jva = jvm_analysis
         if jvm_analysis and jvm_analysis.has_klass(addr):
             return jvm_analysis.lookup_known_klass(addr)
 
-        kargs = {"addr":addr, "jvm_analysis":jvm_analysis,
-                'updated':False,"ooptype":'typeArrayKlassOop',
-                'metatype':'', 'klasstype':'typeArrayKlass',
-                'is_32bit':jvm_analysis.is_32bit}
+        kargs = {"addr": addr, "jvm_analysis": jvm_analysis,
+                 'updated': False, "ooptype": 'typeArrayKlassOop',
+                 'metatype': '', 'klasstype': 'typeArrayKlass',
+                 'is_32bit': jvm_analysis.is_32bit}
         data_unpack = struct.unpack(fmt, _bytes)
         name_fields(data_unpack, nfields, fields=kargs)
         if kargs.get('name', 0) > 0 and jvm_analysis:
             sym = jvm_analysis.lookup_internal_symbol_only(kargs['name'])
             if sym:
-                pass#getattr(self, "jvm_analysis").log ("Processing ArrayKlass: %s at 0x%08x"%(str(sym), addr))
+                pass  # getattr(self, "jvm_analysis").log ("Processing ArrayKlass: %s at 0x%08x"%(str(sym), addr))
             else:
                 return None
-
 
         if jvm_analysis.is_32bit:
             resolve_syms(ArrayKlass.types, ArrayKlass.named32, jvm_analysis, kargs)
@@ -796,14 +793,14 @@ class ArrayKlass (BaseOverlay):
             resolve_syms(ArrayKlass.types, ArrayKlass.named64, jvm_analysis, kargs)
 
         raw_bytes = _bytes[4:8] if jvm_analysis.is_32bit else _bytes[8:0xC]
-        esz, ebt, hsz, tag  = struct.unpack("4B",raw_bytes)
+        esz, ebt, hsz, tag = struct.unpack("4B", raw_bytes)
         kargs['tag'] = tag
-        kargs['element_sz'] = esz**2
+        kargs['element_sz'] = esz ** 2
         kargs['header_sz'] = hsz
         kargs['element_type'] = ebt
         kargs['element_type_str'] = BASIC_TYPE_INFO[ebt] \
-                                    if ebt in BASIC_TYPE_INFO else\
-                                    "Unknown"
+            if ebt in BASIC_TYPE_INFO else \
+            "Unknown"
 
         kargs['next_sibling_value'] = None
         kargs['secondary_supers_value'] = None
@@ -820,7 +817,7 @@ class ArrayKlass (BaseOverlay):
         d = ArrayKlass(**kargs)
         if jvm_analysis:
             jvm_analysis.add_klass(d, check_vtable=True)
-        #d.update_klasses(jvm_analysis)
+        # d.update_klasses(jvm_analysis)
         return d
 
 

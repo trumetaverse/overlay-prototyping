@@ -1,12 +1,12 @@
 import logging
 import sys
+
 from . import consts
 
 
 def init_logger(name=consts.NAME,
                 log_level=logging.DEBUG,
                 logging_fmt=consts.LOGGING_FORMAT):
-
     if name != consts.NAME and consts.LOGGER is None:
         init_logger(log_level=log_level, logging_fmt=logging_fmt)
 

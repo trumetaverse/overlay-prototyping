@@ -1,23 +1,21 @@
 import struct
-import jvm_overlays
-from jvm_overlays import VMSTRUCT_ENTRY_TYPE, GEN_COLLECTED_HEAP_TYPE,\
-                        VIRTUAL_SPACE_TYPE, GENERATION_TYPE, GC_HEAP_LOG_TYPE,\
-                        COLLECTED_HEAP_TYPE, VIRTUAL_SPACE_NODE_TYPE,\
-                        THREAD_SHADOW_TYPE,\
-                        CLASS_LOADER_DATA_TYPE, METASPACE_TYPE,\
-                        SPACE_MANAGER_TYPE, ALLOC_RECORD_TYPE, METACHUNK_TYPE,\
-                        JAVA_FRAME_ANCHOR, JAVA_CALL_VALUE, JAVA_CALL_WRAPPER,\
-                        JAVA_THREAD_PARTIAL, CODE_BLOB, OOP_MAP_VALUE, OOP_MAP,\
-                        OOP_MAP_SET, FRAME, FRAME_VALUE, FRAME_VALUES,\
-                        VFRAME_ARRAY, VFRAME_ARRAY_ELEMENT, BYTECODE_INTERPRETER, \
-                        CI_SYMBOL_TYPE, CI_KLASS_INSTANCE_TYPE, CI_METHOD_TYPE,\
-                        CI_METHOD_BLOCKS, CI_METHOD_BLOCK, CI_OBJECT
-
-from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
-                         get_named_array64, get_field_types, name_fields,\
-                         get_size32, get_size64
 
 from jvm_base import BaseOverlay
+from jvm_overlays import VMSTRUCT_ENTRY_TYPE, GEN_COLLECTED_HEAP_TYPE, \
+    VIRTUAL_SPACE_TYPE, GENERATION_TYPE, GC_HEAP_LOG_TYPE, \
+    COLLECTED_HEAP_TYPE, VIRTUAL_SPACE_NODE_TYPE, \
+    CLASS_LOADER_DATA_TYPE, METASPACE_TYPE, \
+    SPACE_MANAGER_TYPE, ALLOC_RECORD_TYPE, METACHUNK_TYPE, \
+    JAVA_FRAME_ANCHOR, JAVA_CALL_VALUE, JAVA_CALL_WRAPPER, \
+    JAVA_THREAD_PARTIAL, CODE_BLOB, OOP_MAP_VALUE, OOP_MAP, \
+    OOP_MAP_SET, FRAME, FRAME_VALUE, FRAME_VALUES, \
+    VFRAME_ARRAY, VFRAME_ARRAY_ELEMENT, BYTECODE_INTERPRETER, \
+    CI_SYMBOL_TYPE, CI_KLASS_INSTANCE_TYPE, CI_METHOD_TYPE, \
+    CI_METHOD_BLOCKS, CI_METHOD_BLOCK, CI_OBJECT
+from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
+    get_named_array64, get_field_types, name_fields, \
+    get_size32, get_size64
+
 
 class VMStructEntry(BaseOverlay):
     _name = "VMStructEntry"
@@ -31,10 +29,10 @@ class VMStructEntry(BaseOverlay):
     types = get_field_types(VMSTRUCT_ENTRY_TYPE)
 
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
-    def __str__ (self):
+    def __str__(self):
         offset = getattr(self, 'offset', 0)
         address = getattr(self, 'address', 0)
         isStatic = getattr(self, 'isStatic', 0)
@@ -42,10 +40,10 @@ class VMStructEntry(BaseOverlay):
         typeNam = getattr(self, 'typeName_str', '')
         fieldNam = getattr(self, 'fieldName_str', '')
         if isStatic == 0x01:
-            return ("static %s %s::%s => 0x%08x"%(typeStr,
-                   typeNam, fieldNam, address))
-        return ("%s %s::%s => offset from %s => 0x%08x"%(typeStr,
-                   typeNam, fieldNam, typeNam, offset))
+            return ("static %s %s::%s => 0x%08x" % (typeStr,
+                                                    typeNam, fieldNam, address))
+        return ("%s %s::%s => offset from %s => 0x%08x" % (typeStr,
+                                                           typeNam, fieldNam, typeNam, offset))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, analysis, is_32bit=True, word_sz=4):
@@ -54,8 +52,8 @@ class VMStructEntry(BaseOverlay):
         nfields = cls.named32 if is_32bit else cls.named64
         jva = jvm_analysis
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr, 'is_32bit':is_32bit, 'word_sz':word_sz,
-                 'analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr": addr, 'is_32bit': is_32bit, 'word_sz': word_sz,
+                 'analysis': jvm_analysis, 'updated': False}
         name_fields(data_unpack, nfields, fields=kargs)
 
         kargs['typeName_str'] = ""
@@ -85,6 +83,7 @@ class VMStructEntry(BaseOverlay):
             jvm_analysis.add_internal_object(addr, d)
         return d
 
+
 class GCLog(BaseOverlay):
     _name = "GCHeapLog"
     _overlay = GC_HEAP_LOG_TYPE
@@ -95,6 +94,7 @@ class GCLog(BaseOverlay):
     size32 = get_size32(GC_HEAP_LOG_TYPE)
     size64 = get_size64(GC_HEAP_LOG_TYPE)
     types = get_field_types(GC_HEAP_LOG_TYPE)
+
 
 class GenCollectedHeap(BaseOverlay):
     _name = "GenCollectedHeap"
@@ -107,9 +107,10 @@ class GenCollectedHeap(BaseOverlay):
     size64 = get_size64(GEN_COLLECTED_HEAP_TYPE)
     types = get_field_types(GEN_COLLECTED_HEAP_TYPE)
 
-    def __str__ (self):
+    def __str__(self):
         addr = getattr(self, 'addr', 0)
-        return (" GenCollectedHeap => 0x%08x"%(addr))
+        return (" GenCollectedHeap => 0x%08x" % (addr))
+
 
 class Generation(BaseOverlay):
     _name = "Generation"
@@ -122,6 +123,7 @@ class Generation(BaseOverlay):
     size64 = get_size64(GENERATION_TYPE)
     types = get_field_types(GENERATION_TYPE)
 
+
 class CollectedHeap(BaseOverlay):
     _name = "CollectedHeap"
     _overlay = COLLECTED_HEAP_TYPE
@@ -133,9 +135,9 @@ class CollectedHeap(BaseOverlay):
     size64 = get_size64(COLLECTED_HEAP_TYPE)
     types = get_field_types(COLLECTED_HEAP_TYPE)
 
-    def __str__ (self):
+    def __str__(self):
         addr = getattr(self, 'addr', 0)
-        return (" CollectedHeap => 0x%08x"%(addr))
+        return (" CollectedHeap => 0x%08x" % (addr))
 
 
 class VirtualSpace(BaseOverlay):
@@ -149,6 +151,7 @@ class VirtualSpace(BaseOverlay):
     size64 = get_size64(VIRTUAL_SPACE_TYPE)
     types = get_field_types(VIRTUAL_SPACE_TYPE)
 
+
 class VirtualSpaceNode(BaseOverlay):
     _name = "VirtualSpaceNode"
     _overlay = VIRTUAL_SPACE_NODE_TYPE
@@ -159,6 +162,7 @@ class VirtualSpaceNode(BaseOverlay):
     size32 = get_size32(VIRTUAL_SPACE_NODE_TYPE)
     size64 = get_size64(VIRTUAL_SPACE_NODE_TYPE)
     types = get_field_types(VIRTUAL_SPACE_NODE_TYPE)
+
 
 class ClassLoaderData(BaseOverlay):
     _name = "ClassLoaderData"
@@ -174,12 +178,11 @@ class ClassLoaderData(BaseOverlay):
     def get_klass(self):
         class_loader = self.get_class_loader()
         if class_loader:
-           return class_loader.get_klass()
+            return class_loader.get_klass()
         return None
 
     def get_class_loader(self):
         return getattr(self, 'class_loader_value', None)
-
 
     def update_oops(self):
         if getattr(self, 'oop_updated', False):
@@ -192,26 +195,25 @@ class ClassLoaderData(BaseOverlay):
         if oop:
             jva.add_oop(oop)
 
-
     def update_fields(self, force_update=False):
         if self.is_updated(force_update):
             return
         setattr(self, "updated", True)
         jva = self.get_jva()
-        mspace = Metaspace.from_jva(getattr(self, 'metaspace'),jva)
+        mspace = Metaspace.from_jva(getattr(self, 'metaspace'), jva)
         setattr(self, 'metaspace_value', mspace)
         if mspace:
             mspace.update_fields()
         oop_addr = getattr(self, 'class_loader')
-        #oop = jva.lookup_known_oop(oop_addr)
-        #setattr(self, 'class_loader_value', oop)
-        #if oop:
+        # oop = jva.lookup_known_oop(oop_addr)
+        # setattr(self, 'class_loader_value', oop)
+        # if oop:
         #    jva.add_oop(oop)
 
     def get_metaspace(self):
         ms_value = getattr(self, 'metaspace_value', None)
         if ms_value is None:
-             self.update_fields()
+            self.update_fields()
         return getattr(self, 'metaspace_value', None)
 
     def get_metaspaces(self):
@@ -219,7 +221,6 @@ class ClassLoaderData(BaseOverlay):
         vsm = ms_val.get_vsm_contiguous_chunks()
         c_vsm = ms_val.get_class_vsm_contiguous_chunks()
         return vsm + c_vsm
-
 
     def get_metaspace_ranges(self, force_update=False):
         ms_value = self.get_metaspace()
@@ -230,7 +231,7 @@ class ClassLoaderData(BaseOverlay):
             return
         setattr(self, "updated", True)
         jva = self.get_jva()
-        mspace = Metaspace.from_jva(getattr(self, 'metaspace'),jva)
+        mspace = Metaspace.from_jva(getattr(self, 'metaspace'), jva)
         setattr(self, 'metaspace_value', mspace)
         if mspace:
             mspace.update_fields()
@@ -263,28 +264,28 @@ class SpaceManager(BaseOverlay):
         setattr(self, 'chunk_by_addr', chunk_by_addr)
 
         for i in range(0, NumberOfInUseLists):
-            attr = "chunks_in_use_%d"%i
+            attr = "chunks_in_use_%d" % i
             addr = getattr(self, attr)
             chunk = None
             if jva.is_valid_addr(addr):
-               chunk = Metachunk.from_jva(addr,jva)
-               if not isinstance(chunk, Metachunk):
-                   continue
-               #chunk.print_dump()
-               chunk.update_fields()
-               chunks.append(chunk)
-            setattr(self, attr+'_value', chunk)
+                chunk = Metachunk.from_jva(addr, jva)
+                if not isinstance(chunk, Metachunk):
+                    continue
+                # chunk.print_dump()
+                chunk.update_fields()
+                chunks.append(chunk)
+            setattr(self, attr + '_value', chunk)
 
         attr = "current_chunk"
         addr = getattr(self, attr)
         chunk = None
         if jva.is_valid_addr(addr) and not addr in chunk_by_addr:
-           chunk = Metachunk.from_jva(addr,jva)
-           chunk.update_fields()
-           chunks.append(chunk)
+            chunk = Metachunk.from_jva(addr, jva)
+            chunk.update_fields()
+            chunks.append(chunk)
         elif addr in chunk_by_addr:
-           chunk = chunk_by_addr[addr]
-        setattr(self, attr+'_value', chunk)
+            chunk = chunk_by_addr[addr]
+        setattr(self, attr + '_value', chunk)
 
     def accumulate_chunks(self):
         acc_chunks = []
@@ -299,7 +300,7 @@ class SpaceManager(BaseOverlay):
         for chunk in acc_chunks:
             addr = chunk.addr
             if not chunk.addr in chunk_by_addr:
-                chunk_info.append({'start':chunk.addr, 'size':chunk.word_size})
+                chunk_info.append({'start': chunk.addr, 'size': chunk.word_size})
                 chunk_by_addr[chunk.addr] = chunk
         return chunk_by_addr
 
@@ -311,13 +312,12 @@ class SpaceManager(BaseOverlay):
         last_chunk = None
         for addr in addr_list:
             c = chunk_by_addr[addr]
-            if last_chunk and c.addr == last_chunk[0]+last_chunk[1]:
+            if last_chunk and c.addr == last_chunk[0] + last_chunk[1]:
                 last_chunk[1] += c.word_size
             else:
                 last_chunk = [c.addr, c.word_size]
                 chunks.append(last_chunk)
         return chunks
-
 
 
 class AllocRecord(BaseOverlay):
@@ -330,6 +330,7 @@ class AllocRecord(BaseOverlay):
     size32 = get_size32(ALLOC_RECORD_TYPE)
     size64 = get_size64(ALLOC_RECORD_TYPE)
     types = get_field_types(ALLOC_RECORD_TYPE)
+
 
 class Metaspace(BaseOverlay):
     _name = "Metaspace"
@@ -350,7 +351,7 @@ class Metaspace(BaseOverlay):
         addr = getattr(self, 'vsm')
         vsm = None
         if jva.is_valid_addr(addr):
-            vsm = SpaceManager.from_jva(addr,jva)
+            vsm = SpaceManager.from_jva(addr, jva)
             vsm.update_fields()
         setattr(self, 'vsm_value', vsm)
 
@@ -358,7 +359,7 @@ class Metaspace(BaseOverlay):
         addr = getattr(self, 'class_vsm')
         # TODO figure out why this class_vsm does not match up
         # in the Non-NULL class loader
-        #if jva.is_valid_addr(addr):
+        # if jva.is_valid_addr(addr):
         #    csm = SpaceManager.from_jva(addr,jva)
         #    csm.print_dump()
         #    csm.update_fields()
@@ -394,6 +395,7 @@ class Metaspace(BaseOverlay):
             return []
         return class_vsm_value.build_contiguous_chunks()
 
+
 class Metachunk(BaseOverlay):
     _name = "Metachunk"
     _overlay = METACHUNK_TYPE
@@ -413,13 +415,13 @@ class Metachunk(BaseOverlay):
         addr = getattr(self, 'next')
         next_value = None
         if jva.is_valid_addr(addr):
-            next_value = Metachunk.from_jva(addr,jva)
+            next_value = Metachunk.from_jva(addr, jva)
         setattr(self, 'next_value', next_value)
 
         addr = getattr(self, 'prev')
         prev_value = None
         if jva.is_valid_addr(addr):
-            prev_value = Metachunk.from_jva(addr,jva)
+            prev_value = Metachunk.from_jva(addr, jva)
         setattr(self, 'prev_value', prev_value)
 
         if next_value:
@@ -437,14 +439,15 @@ class Metachunk(BaseOverlay):
 
         value = getattr(self, 'next_value', None)
         if value and not getattr(value, 'addr') in visited:
-           chunks += value.accumulate_chunks(visited)
+            chunks += value.accumulate_chunks(visited)
 
         value = getattr(self, 'prev_value', None)
         if value and not getattr(value, 'addr') in visited:
-           chunks += value.accumulate_chunks(visited)
+            chunks += value.accumulate_chunks(visited)
         return chunks
 
-#class ThreadShadow(BaseOverlay):
+
+# class ThreadShadow(BaseOverlay):
 #    _name = "ThreadShadow"
 #    _overlay = THREAD_SHADOW_TYPE
 #    bits32 = get_bits32(THREAD_SHADOW_TYPE)
@@ -467,6 +470,7 @@ class JavaFrameAnchor(BaseOverlay):
     size64 = get_size64(JAVA_FRAME_ANCHOR)
     types = get_field_types(JAVA_FRAME_ANCHOR)
 
+
 class JavaCallWrapper(BaseOverlay):
     _name = "JavaCallWrapper"
     _overlay = JAVA_CALL_WRAPPER
@@ -477,6 +481,7 @@ class JavaCallWrapper(BaseOverlay):
     size32 = get_size32(JAVA_CALL_WRAPPER)
     size64 = get_size64(JAVA_CALL_WRAPPER)
     types = get_field_types(JAVA_CALL_WRAPPER)
+
 
 class JavaCallValue(BaseOverlay):
     _name = "JavaCallValue"
@@ -489,6 +494,7 @@ class JavaCallValue(BaseOverlay):
     size64 = get_size64(JAVA_CALL_VALUE)
     types = get_field_types(JAVA_CALL_VALUE)
 
+
 class JavaThreadPartial(BaseOverlay):
     _name = "JavaCallValue"
     _overlay = JAVA_THREAD_PARTIAL
@@ -500,6 +506,7 @@ class JavaThreadPartial(BaseOverlay):
     size64 = get_size64(JAVA_THREAD_PARTIAL)
     types = get_field_types(JAVA_THREAD_PARTIAL)
 
+
 class CodeBlob(BaseOverlay):
     _name = "CodeBlob"
     _overlay = CODE_BLOB
@@ -510,6 +517,7 @@ class CodeBlob(BaseOverlay):
     size32 = get_size32(CODE_BLOB)
     size64 = get_size64(CODE_BLOB)
     types = get_field_types(CODE_BLOB)
+
 
 class OopMapValue(BaseOverlay):
     _name = "OopMapValue"
@@ -546,6 +554,7 @@ class OopMapSet(BaseOverlay):
     size64 = get_size64(OOP_MAP_SET)
     types = get_field_types(OOP_MAP_SET)
 
+
 class Frame(BaseOverlay):
     _name = "Frame"
     _overlay = FRAME
@@ -556,6 +565,7 @@ class Frame(BaseOverlay):
     size32 = get_size32(FRAME)
     size64 = get_size64(FRAME)
     types = get_field_types(FRAME)
+
 
 class FrameValues(BaseOverlay):
     _name = "FrameValues"
@@ -568,6 +578,7 @@ class FrameValues(BaseOverlay):
     size64 = get_size64(FRAME_VALUES)
     types = get_field_types(FRAME_VALUES)
 
+
 class FrameValue(BaseOverlay):
     _name = "FrameValue"
     _overlay = FRAME_VALUE
@@ -578,6 +589,7 @@ class FrameValue(BaseOverlay):
     size32 = get_size32(FRAME_VALUE)
     size64 = get_size64(FRAME_VALUE)
     types = get_field_types(FRAME_VALUE)
+
 
 class VFrameArray(BaseOverlay):
     _name = "VFrameArray"
@@ -590,6 +602,7 @@ class VFrameArray(BaseOverlay):
     size64 = get_size64(VFRAME_ARRAY)
     types = get_field_types(VFRAME_ARRAY)
 
+
 class VFrameArrayElement(BaseOverlay):
     _name = "VFrameArrayElement"
     _overlay = VFRAME_ARRAY_ELEMENT
@@ -600,6 +613,7 @@ class VFrameArrayElement(BaseOverlay):
     size32 = get_size32(VFRAME_ARRAY_ELEMENT)
     size64 = get_size64(VFRAME_ARRAY_ELEMENT)
     types = get_field_types(VFRAME_ARRAY_ELEMENT)
+
 
 class BytecodeInterpreter(BaseOverlay):
     _name = "BytecodeInterpreter"
@@ -612,6 +626,7 @@ class BytecodeInterpreter(BaseOverlay):
     size64 = get_size64(BYTECODE_INTERPRETER)
     types = get_field_types(BYTECODE_INTERPRETER)
 
+
 class ciSymbol(BaseOverlay):
     _name = "ciSymbol"
     _overlay = CI_SYMBOL_TYPE
@@ -623,6 +638,7 @@ class ciSymbol(BaseOverlay):
     size64 = get_size64(CI_SYMBOL_TYPE)
     types = get_field_types(CI_SYMBOL_TYPE)
 
+
 class ciMethod(BaseOverlay):
     _name = "ciMethod"
     _overlay = CI_METHOD_TYPE
@@ -633,6 +649,7 @@ class ciMethod(BaseOverlay):
     size32 = get_size32(CI_METHOD_TYPE)
     size64 = get_size64(CI_METHOD_TYPE)
     types = get_field_types(CI_METHOD_TYPE)
+
 
 class ciKlassInstance(BaseOverlay):
     _name = "ciKlassInstance"

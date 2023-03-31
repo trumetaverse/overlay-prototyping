@@ -1,26 +1,25 @@
-from overlay_prototyping.base import *
-
 get_oop = lambda jva, addr: None if jva is None \
-                             else jva.get_oop(addr)
+    else jva.get_oop(addr)
 get_klass = lambda jva, addr: None if jva is None \
-                             else jva.get_klass(addr)
+    else jva.get_klass(addr)
 get_meta = lambda jva, addr, cls: None if jva is None \
-                             else jva.get_meta(addr, cls)
+    else jva.get_meta(addr, cls)
 get_sym = lambda jva, addr: None if jva is None \
-                        else jva.lookup_internal_symbol(addr)
+    else jva.lookup_internal_symbol(addr)
 get_aklassoop = lambda jva, addr: None if jva is None \
-                             else jva.get_aklassoop(addr)
+    else jva.get_aklassoop(addr)
 get_oaklassoop = lambda jva, addr: None if jva is None \
-                             else jva.get_oaklassoop(addr)
+    else jva.get_oaklassoop(addr)
 get_aobjoop = lambda jva, addr: None if jva is None \
-                             else jva.get_aobjoop(addr)
+    else jva.get_aobjoop(addr)
 get_atypeoop = lambda jva, addr: None if jva is None \
-                             else jva.get_atypeoop(addr)
+    else jva.get_atypeoop(addr)
 
 get_cpoop = lambda jva, addr: None if jva is None \
-                             else jva.get_constantPoolOop(addr)
+    else jva.get_constantPoolOop(addr)
 
-def resolve_syms (types, names, jva, fields):
+
+def resolve_syms(types, names, jva, fields):
     pos = 0
     types = types
     end = len(types)
@@ -33,6 +32,7 @@ def resolve_syms (types, names, jva, fields):
             fields[name_value] = sym
         pos += 1
     return fields
+
 
 CHAR_OOP_TYPE = [
     ['2c', '2c', 'jchar', 'data']
@@ -69,13 +69,12 @@ ARRAY_OOP_TYPE = [
 TYPE_ARRAY_OOP_TYPE = ARRAY_OOP_TYPE
 OBJ_ARRAY_OOP_TYPE = ARRAY_OOP_TYPE
 
-
 # Metadata classes
 # //      class MetaspaceObj
 # class   Method;
 # //      class CHeapObj
 # class   CompiledICHolder;
-COMPILED_IC_HOLDER_TYPE =  [
+COMPILED_IC_HOLDER_TYPE = [
     ['I', 'Q', 'void*', 'vtable'],
     ['I', 'I', 'int', 'live_count'],
     ['I', 'I', 'int', 'live_count_not_claimed_count'],
@@ -84,7 +83,7 @@ COMPILED_IC_HOLDER_TYPE =  [
     ['I', 'Q', 'CompiledICHolder*', 'next'],
 ]
 
-COMPILED_IC_HOLDER_META_TYPE =  [
+COMPILED_IC_HOLDER_META_TYPE = [
     ['I', 'Q', 'void*', 'vtable'],
     ['I', 'Q', 'methodOop', 'holder_method'],
     ['I', 'Q', 'klassOop', 'holder_klass'],
@@ -101,9 +100,9 @@ CI_METHOD_BLOCK = [
 ]
 
 CI_OBJECT = [
-   ['Q', 'I', 'uint', '_ident'],
-   ['Q', 'I', 'jobject', '_handle'],
-   ['Q', 'I', 'ciKlass*', '_klass'],
+    ['Q', 'I', 'uint', '_ident'],
+    ['Q', 'I', 'jobject', '_handle'],
+    ['Q', 'I', 'ciKlass*', '_klass'],
 
 ]
 
@@ -117,62 +116,61 @@ CI_METHOD_BLOCKS = [
 ]
 
 CI_METHOD_TYPE = [
-  ['I', 'I', 'uint', '_ident'],
-  ['Q', 'I', 'Metadata*', '_metadata'],
-  ['I', 'I', 'ciFlags', '_flags'],
-  ['Q', 'I', 'ciSymbol*', '_name'],
-  ['Q', 'I', 'ciInstanceKlass*', '_holder'],
-  ['Q', 'I', 'ciSignature*', '_signature'],
-  ['Q', 'I', 'ciMethodData*', '_method_data'],
-  ['Q', 'I', 'ciMethodBlocks*', '_method_blocks'],
-  ['I', 'I', 'int', '_code_size'],
-  ['I', 'I', 'int', '_max_stack'],
-  ['I', 'I', 'int', '_max_locals'],
-  ['I', 'I', 'vmIntrinsics::ID' , '_intrinsic_id'],
-  ['I', 'I', 'int', '_handler_count'],
-  ['I', 'I', 'int', '_interpreter_invocation_count'],
-  ['I', 'I', 'int', '_interpreter_throwout_count'],
-  ['I', 'I', 'int', '_instructions_size'],
-  ['I', 'I', 'int', '_size_of_parameters'],
-  ['I', 'B', 'bool', '_uses_monitors'],
-  ['I', 'B', 'bool', '_balanced_monitors'],
-  ['I', 'B', 'bool', '_is_c1_compilable'],
-  ['I', 'B', 'bool', '_is_c2_compilable'],
-  ['3B', '3B', 'bool', 'word_padding'],
-  ['B', 'B', 'bool', '_can_be_statically_bound'],
-  ['Q', 'I', 'address', '_code'],
-  ['Q', 'I', 'ciExceptionHandler**', '_exception_handlers'],
-  ['Q', 'I', 'MethodLiveness*', '_liveness'],
-  ['Q', 'I', 'ciTypeFlow*', '_flow'],
-  ['Q', 'I', 'BCEscapeAnalyzer*', '_bcea'],
+    ['I', 'I', 'uint', '_ident'],
+    ['Q', 'I', 'Metadata*', '_metadata'],
+    ['I', 'I', 'ciFlags', '_flags'],
+    ['Q', 'I', 'ciSymbol*', '_name'],
+    ['Q', 'I', 'ciInstanceKlass*', '_holder'],
+    ['Q', 'I', 'ciSignature*', '_signature'],
+    ['Q', 'I', 'ciMethodData*', '_method_data'],
+    ['Q', 'I', 'ciMethodBlocks*', '_method_blocks'],
+    ['I', 'I', 'int', '_code_size'],
+    ['I', 'I', 'int', '_max_stack'],
+    ['I', 'I', 'int', '_max_locals'],
+    ['I', 'I', 'vmIntrinsics::ID', '_intrinsic_id'],
+    ['I', 'I', 'int', '_handler_count'],
+    ['I', 'I', 'int', '_interpreter_invocation_count'],
+    ['I', 'I', 'int', '_interpreter_throwout_count'],
+    ['I', 'I', 'int', '_instructions_size'],
+    ['I', 'I', 'int', '_size_of_parameters'],
+    ['I', 'B', 'bool', '_uses_monitors'],
+    ['I', 'B', 'bool', '_balanced_monitors'],
+    ['I', 'B', 'bool', '_is_c1_compilable'],
+    ['I', 'B', 'bool', '_is_c2_compilable'],
+    ['3B', '3B', 'bool', 'word_padding'],
+    ['B', 'B', 'bool', '_can_be_statically_bound'],
+    ['Q', 'I', 'address', '_code'],
+    ['Q', 'I', 'ciExceptionHandler**', '_exception_handlers'],
+    ['Q', 'I', 'MethodLiveness*', '_liveness'],
+    ['Q', 'I', 'ciTypeFlow*', '_flow'],
+    ['Q', 'I', 'BCEscapeAnalyzer*', '_bcea'],
 ]
 
 CI_KLASS_INSTANCE_TYPE = [
-  ['I', 'I', 'uint', '_ident'],
-  ['Q', 'I', 'Metadata*', '_metadata'],
-  ['I', 'I', 'BasicType', '_basic_type'],
-  ['Q', 'I', 'ciSymbol*', '_name'],
-  ['I', 'I', 'jint', '_layout_helper'],
-  ['I', 'I', 'jobject', '_loader'],
-  ['I', 'I', 'jobject', '_protection_domain'],
-  ['I', 'I', 'InstanceKlass::ClassState', '_init_state'],
-  ['B', 'B', 'bool', '_is_shared'],
-  ['B', 'B', 'bool', '_has_finalizer'],
-  ['B', 'B', 'bool', '_has_subklass'],
-  ['B', 'B', 'bool', '_has_nonstatic_fields'],
-  ['3B', '3B', 'bool', 'word_padding'],
-  ['B', 'B', 'bool', '_has_default_methods'],
-  ['I', 'I', 'ciFlags', '_flags'],
-  ['I', 'I', 'jint', '_nonstatic_field_size'],
-  ['I', 'I', 'jint', '_nonstatic_oop_map_size'],
-  ['I', 'I', 'ciInstanceKlass*', '_super'],
-  ['I', 'I', 'ciInstance*', '_java_mirror'],
-  ['I', 'I', 'ciConstantPoolCache*', '_field_cache'],
-  ['I', 'I', 'GrowableArray<ciField*>*', '_nonstatic_fields'],
-  ['I', 'I', 'ciInstanceKlass*', '_implementor'],
-  ['I', 'I', 'GrowableArray<ciField*>*', '_non_static_fields'],
+    ['I', 'I', 'uint', '_ident'],
+    ['Q', 'I', 'Metadata*', '_metadata'],
+    ['I', 'I', 'BasicType', '_basic_type'],
+    ['Q', 'I', 'ciSymbol*', '_name'],
+    ['I', 'I', 'jint', '_layout_helper'],
+    ['I', 'I', 'jobject', '_loader'],
+    ['I', 'I', 'jobject', '_protection_domain'],
+    ['I', 'I', 'InstanceKlass::ClassState', '_init_state'],
+    ['B', 'B', 'bool', '_is_shared'],
+    ['B', 'B', 'bool', '_has_finalizer'],
+    ['B', 'B', 'bool', '_has_subklass'],
+    ['B', 'B', 'bool', '_has_nonstatic_fields'],
+    ['3B', '3B', 'bool', 'word_padding'],
+    ['B', 'B', 'bool', '_has_default_methods'],
+    ['I', 'I', 'ciFlags', '_flags'],
+    ['I', 'I', 'jint', '_nonstatic_field_size'],
+    ['I', 'I', 'jint', '_nonstatic_oop_map_size'],
+    ['I', 'I', 'ciInstanceKlass*', '_super'],
+    ['I', 'I', 'ciInstance*', '_java_mirror'],
+    ['I', 'I', 'ciConstantPoolCache*', '_field_cache'],
+    ['I', 'I', 'GrowableArray<ciField*>*', '_nonstatic_fields'],
+    ['I', 'I', 'ciInstanceKlass*', '_implementor'],
+    ['I', 'I', 'GrowableArray<ciField*>*', '_non_static_fields'],
 ]
-
 
 METHOD_DATA_META_TYPE = [
     ['I', 'Q', 'void*', 'vtable'],
@@ -199,26 +197,25 @@ METHOD_DATA_META_TYPE = [
     ['B', 'B', 'bool', 'would_profile'],
     ['I', 'I', 'int', 'data_size'],
     ['I', 'I', 'int', 'parameters_type_data_di'],
-    ['I', 'I', 'int', 'data'], # length of data is depened on size
+    ['I', 'I', 'int', 'data'],  # length of data is depened on size
 ]
 
 CONSTANT_POOL_META_TYPE = [
-  ['I', 'Q', 'void*', 'vtable'],
-  ['I', 'Q', 'Array<u1>*', 'tags'],
-  ['I', 'Q', 'ConstantPoolCache*', 'cache'],
-  ['I', 'Q', 'InstanceKlass*', 'pool_holder'],
-  ['I', 'Q', 'Array<u2>*', 'operands'],
-  ['I', 'Q', 'jobject', 'resolved_references'],
-  ['I', 'Q', 'Array<u2>*', 'reference_map'],
-  ['I', 'I', 'int', 'flags'],
-  ['I', 'I', 'int', 'length'],
-  ['I', 'I', 'int', 'saved'],
-  ['I', 'Q', 'Monitor*', 'lock'],
+    ['I', 'Q', 'void*', 'vtable'],
+    ['I', 'Q', 'Array<u1>*', 'tags'],
+    ['I', 'Q', 'ConstantPoolCache*', 'cache'],
+    ['I', 'Q', 'InstanceKlass*', 'pool_holder'],
+    ['I', 'Q', 'Array<u2>*', 'operands'],
+    ['I', 'Q', 'jobject', 'resolved_references'],
+    ['I', 'Q', 'Array<u2>*', 'reference_map'],
+    ['I', 'I', 'int', 'flags'],
+    ['I', 'I', 'int', 'length'],
+    ['I', 'I', 'int', 'saved'],
+    ['I', 'Q', 'Monitor*', 'lock'],
 ]
 
-
 METHOD_COUNTERS_META_TYPE = [
-    #['I', 'Q', 'void*', 'vtable'],
+    # ['I', 'Q', 'void*', 'vtable'],
     ['I', 'I', 'int', '_interpreter_invocation_count'],
     ['H', 'H', 'u2', '_interpreter_throwout_count'],
     ['H', 'H', 'u2', '_number_of_breakpoints'],
@@ -232,7 +229,7 @@ METHOD_COUNTERS_META_TYPE = [
 ]
 
 CONST_METHOD_META_TYPE = [
-    #['I', 'Q', 'void*', 'vtable'],
+    # ['I', 'Q', 'void*', 'vtable'],
     ['Q', 'Q', 'uint64_t', 'fingerprint'],
     ['I', 'Q', 'ConstantPool*', 'constants'],
     ['I', 'Q', 'Array<u1>*', 'stackmap_data'],
@@ -264,7 +261,6 @@ METHOD_META_TYPE = [
     ['I', 'Q', 'address', 'from_interpreted_entry'],
 ]
 
-
 CP_CACHE_ENTRY_META_TYPE = [
     ['I', 'I', 'intx', 'indices'],
     ['I', 'Q', 'MetaData*', 'f1'],
@@ -276,7 +272,6 @@ CP_CACHE_META_TYPE = [
     ['I', 'I', 'int', 'length'],
     ['I', 'Q', 'ConstantPool*', 'contant_pool'],
 ]
-
 
 INVOCATION_COUNTER = [
     ['I', 'I', 'unsigned int', 'counter'],
@@ -304,8 +299,8 @@ KLASS_TYPE = [
     ['2B', '2B', 'PADDING', 'word_padding'],
     ['B', 'B', 'jbyte', 'modified_oops'],
     ['B', 'B', 'jbyte', 'accumulated_modified_oops'],
-    ['I', 'I', 'int', 'trace_id',],
-    ['I', 'I', 'PADDING', 'moar_padding',],
+    ['I', 'I', 'int', 'trace_id', ],
+    ['I', 'I', 'PADDING', 'moar_padding', ],
 ]
 
 KLASS_TYPE_WIN = [
@@ -330,52 +325,52 @@ KLASS_TYPE_WIN = [
     ['2B', '2B', 'PADDING', 'word_padding'],
     ['B', 'B', 'jbyte', 'modified_oops'],
     ['B', 'B', 'jbyte', 'accumulated_modified_oops'],
-    ['I', 'I', 'int', 'trace_id',],
-    ['I', 'I', 'PADDING', 'moar_padding',],
-    ['I', 'I', 'PADDING', 'moar_padding2',],
+    ['I', 'I', 'int', 'trace_id', ],
+    ['I', 'I', 'PADDING', 'moar_padding', ],
+    ['I', 'I', 'PADDING', 'moar_padding2', ],
 ]
 
-INSTANCE_KLASS_TYPE_OVERLAY =     [['I', 'Q', 'Annotations*', 'annotations'],
-    ['I', 'Q', 'Klass*', 'array_klasses'],
-    ['I', 'Q', 'ConstantPool*', 'constants'],
-    ['I', 'Q', 'Array<jushort>*', 'inner_classes'],
-    ['I', 'Q', 'char*', 'source_debug_extension'],
-    ['I', 'Q', 'Symbol*', 'array_name'],
-    ['I', 'I', 'int', 'nonstatic_field_size'],
-    ['I', 'I', 'int', 'static_field_size'],
-    ['H', 'H', 'u2', 'generic_signature'],
-    ['H', 'H', 'u2', 'source_file_name_index'],
-    ['H', 'H', 'u2', 'static_oop_field_count'],
-    ['H', 'H', 'u2', 'java_fields_count'],
-    ['I', 'I', 'int', 'nonstatic_oop_map_size'],
-    ['H', 'B', 'bool', 'is_marked_dependent'],
-    ['H', 'H', 'u2', 'misc_flags'],
-    ['H', 'H', 'u2', 'minor_version'],
-    ['H', 'H', 'u2', 'major_version'],
-    ['I', 'Q', 'Thread*', 'init_thread'],
-    ['I', 'I', 'int', 'vtable_len'],
-    ['I', 'I', 'int', 'itable_len'],
-    ['I', 'Q', 'OopMapCache*', 'oop_map_cache'],
-    ['I', 'Q', 'MemberNameTable*', 'member_names'],
-    ['I', 'Q', 'JNIid*', 'jni_ids'],
-    ['I', 'Q', 'nmethodBucket*', 'dependencies'],
-    ['I', 'Q', 'jmethodID*', 'methods_jmethod_ids'],
-    ['I', 'Q', 'nmethod*', 'osr_nmethods_head'],
-    ['I', 'Q', 'BreakpointInfo*', 'breakpoints'],
-    ['I', 'Q', 'GrowableArray<PreviousVersionNode *>*', 'previous_versions'],
-    ['I', 'Q', 'JvmtiCachedClassFileData*', 'cached_class_file'],
-    ['H', 'H', 'u2', 'idnum_allocated_count'],
-    ['B', 'B', 'u1', 'init_state'],
-    ['B', 'B', 'u1', 'reference_type'],
-    ['I', 'Q', 'JvmtiCachedClassFieldMap*', 'jvmti_cached_class_field_map'],
-    ['I', 'Q', 'Array<Method*>*', 'methods'],
-    ['I', 'Q', 'Array<Method*>*', 'default_methods'],
-    ['I', 'Q', 'Array<Klass*>*', 'local_interfaces'],
-    ['I', 'Q', 'Array<Klass*>*', 'transitive_interfaces'],
-    ['I', 'Q', 'Array<int>*', 'method_ordering'],
-    ['I', 'Q', 'Array<int>*', 'default_vtable_indices'],
-    ['I', 'Q', 'Array<u2>*', 'fields'],
-]
+INSTANCE_KLASS_TYPE_OVERLAY = [['I', 'Q', 'Annotations*', 'annotations'],
+                               ['I', 'Q', 'Klass*', 'array_klasses'],
+                               ['I', 'Q', 'ConstantPool*', 'constants'],
+                               ['I', 'Q', 'Array<jushort>*', 'inner_classes'],
+                               ['I', 'Q', 'char*', 'source_debug_extension'],
+                               ['I', 'Q', 'Symbol*', 'array_name'],
+                               ['I', 'I', 'int', 'nonstatic_field_size'],
+                               ['I', 'I', 'int', 'static_field_size'],
+                               ['H', 'H', 'u2', 'generic_signature'],
+                               ['H', 'H', 'u2', 'source_file_name_index'],
+                               ['H', 'H', 'u2', 'static_oop_field_count'],
+                               ['H', 'H', 'u2', 'java_fields_count'],
+                               ['I', 'I', 'int', 'nonstatic_oop_map_size'],
+                               ['H', 'B', 'bool', 'is_marked_dependent'],
+                               ['H', 'H', 'u2', 'misc_flags'],
+                               ['H', 'H', 'u2', 'minor_version'],
+                               ['H', 'H', 'u2', 'major_version'],
+                               ['I', 'Q', 'Thread*', 'init_thread'],
+                               ['I', 'I', 'int', 'vtable_len'],
+                               ['I', 'I', 'int', 'itable_len'],
+                               ['I', 'Q', 'OopMapCache*', 'oop_map_cache'],
+                               ['I', 'Q', 'MemberNameTable*', 'member_names'],
+                               ['I', 'Q', 'JNIid*', 'jni_ids'],
+                               ['I', 'Q', 'nmethodBucket*', 'dependencies'],
+                               ['I', 'Q', 'jmethodID*', 'methods_jmethod_ids'],
+                               ['I', 'Q', 'nmethod*', 'osr_nmethods_head'],
+                               ['I', 'Q', 'BreakpointInfo*', 'breakpoints'],
+                               ['I', 'Q', 'GrowableArray<PreviousVersionNode *>*', 'previous_versions'],
+                               ['I', 'Q', 'JvmtiCachedClassFileData*', 'cached_class_file'],
+                               ['H', 'H', 'u2', 'idnum_allocated_count'],
+                               ['B', 'B', 'u1', 'init_state'],
+                               ['B', 'B', 'u1', 'reference_type'],
+                               ['I', 'Q', 'JvmtiCachedClassFieldMap*', 'jvmti_cached_class_field_map'],
+                               ['I', 'Q', 'Array<Method*>*', 'methods'],
+                               ['I', 'Q', 'Array<Method*>*', 'default_methods'],
+                               ['I', 'Q', 'Array<Klass*>*', 'local_interfaces'],
+                               ['I', 'Q', 'Array<Klass*>*', 'transitive_interfaces'],
+                               ['I', 'Q', 'Array<int>*', 'method_ordering'],
+                               ['I', 'Q', 'Array<int>*', 'default_vtable_indices'],
+                               ['I', 'Q', 'Array<u2>*', 'fields'],
+                               ]
 
 INSTANCE_KLASS_TYPE = KLASS_TYPE + INSTANCE_KLASS_TYPE_OVERLAY
 INSTANCE_KLASS_TYPE_WIN = KLASS_TYPE_WIN + INSTANCE_KLASS_TYPE_OVERLAY
@@ -560,7 +555,7 @@ VIRTUAL_SPACE_TYPE = [
     ['I', 'Q', 'char*', 'low'],
     ['I', 'Q', 'char*', 'high'],
     ['B', 'B', 'bool', 'special'],
-    ['B', 'B', 'bool'  , 'executable'],
+    ['B', 'B', 'bool', 'executable'],
     ['B', '2B', 'ALIGN', 'BOOL_ALIGNMENT'],
     ['I', 'Q', 'char*', 'lower_high'],
     ['I', 'Q', 'char*', 'middle_high'],
@@ -573,36 +568,35 @@ VIRTUAL_SPACE_TYPE = [
     ['I', 'Q', 'size_t', 'upper_alignment'],
 ]
 
-
 RESERVED_SPACE_TYPE = [
     ['I', 'Q', 'char*', 'base'],
     ['I', 'Q', 'size_t', 'size'],
     ['I', 'Q', 'size_t', 'noaccess_prefix'],
     ['I', 'Q', 'size_t', 'alignment'],
     ['B', 'B', 'bool', 'special'],
-    ['B', 'B', 'bool'  , 'executable'],
+    ['B', 'B', 'bool', 'executable'],
 ]
 VIRTUAL_SPACE_NODE_TYPE = [
     ['I', 'Q', 'VirtualSpaceNode*', 'next'],
-    #MEMREGION_TYPE + \
+    # MEMREGION_TYPE + \
     ['I', 'Q', 'HeapWord*', 'reserved_start'],
     ['I', 'Q', 'size_t', 'reserved_word_size'],
     # End mem region type
-    #RESERVED_SPACE_TYPE + \
+    # RESERVED_SPACE_TYPE + \
     ['I', 'Q', 'char*', 'rs_base'],
     ['I', 'Q', 'size_t', 'rs_size'],
     ['I', 'Q', 'size_t', 'rs_noaccess_prefix'],
     ['I', 'Q', 'size_t', 'rs_alignment'],
     ['B', 'B', 'bool', 'rs_special'],
-    ['B', 'B', 'bool'  , 'rs_executable'],
+    ['B', 'B', 'bool', 'rs_executable'],
     # End reserved space type
-    #VIRTUAL_SPACE_TYPE + \
+    # VIRTUAL_SPACE_TYPE + \
     ['I', 'Q', 'char*', 'virtual_space_low_boundary'],
     ['I', 'Q', 'char*', 'virtual_space_high_boundary'],
     ['I', 'Q', 'char*', 'virtual_space_low'],
     ['I', 'Q', 'char*', 'virtual_space_high'],
     ['B', 'B', 'bool', 'virtual_space_special'],
-    ['B', 'B', 'bool'  , 'virtual_space_executable'],
+    ['B', 'B', 'bool', 'virtual_space_executable'],
     ['B', '2B', 'ALIGN', 'virtual_space_BOOL_ALIGNMENT'],
     ['I', 'Q', 'char*', 'virtual_space_lower_high'],
     ['I', 'Q', 'char*', 'virtual_space_middle_high'],
@@ -617,7 +611,6 @@ VIRTUAL_SPACE_NODE_TYPE = [
     ['I', 'Q', 'MetaWord*', 'top'],
 ]
 
-
 VIRTUAL_SPACE_LIST_TYPE = [
     ['I', 'Q', 'VirtualSpaceNode*', 'virtual_space_list'],
     ['I', 'Q', 'VirtualSpaceNode*', 'current_virtual_space'],
@@ -627,7 +620,6 @@ VIRTUAL_SPACE_LIST_TYPE = [
     ['I', 'Q', 'size_t', 'committed_words'],
     ['I', 'Q', 'size_t', 'virtual_space_count'],
 ]
-
 
 SPLIT_WORD_TYPE = [
     ['I', 'Q', 'intptr_t', 'FullWord'],
@@ -658,7 +650,7 @@ EVENT_LOG_TYPE = [
     ['I', 'Q', 'void*', 'vtable'],
     ['I', 'Q', 'EventLog*', 'next'],
 ]
-#MONITOR_TYPE +\
+# MONITOR_TYPE +\
 EVENT_LOG_BASE_TYPE = EVENT_LOG_TYPE + [
     # ['d', 'd', 'double', 'timestamp'],
     # ['I', 'Q', 'Thread*', 'thread'],
@@ -669,41 +661,38 @@ EVENT_LOG_BASE_TYPE = EVENT_LOG_TYPE + [
 
 ]
 
-GC_HEAP_LOG_TYPE  = EVENT_LOG_BASE_TYPE
-
-
-
+GC_HEAP_LOG_TYPE = EVENT_LOG_BASE_TYPE
 
 GENERATION_TYPE = [
-    # ['I', 'Q', 'void*', 'vtable_gen_collected_heap'],
-    ['Q', 'Q', 'jlong', 'time_of_last_gc'],
-    ['I', 'Q', 'HeapWord*', 'prev_used_region.start'],
-    ['I', 'Q', 'size_t', 'prev_used_region.word_size'],
-    ['I', 'Q', 'HeapWord*', 'reserved.start'],
-    ['I', 'Q', 'size_t', 'reserved.word_size'],
-] + VIRTUAL_SPACE_TYPE + \
-[
-    ['I', 'I', 'int', 'level'],
-    ['I', 'Q', 'ReferenceProcessor', 'ref_processor'],
-    ['I', 'Q', 'CollectorCounters', 'gc_counters'],
-    ['I', 'Q', 'GCStats', 'gc_stats'],
-]
+                      # ['I', 'Q', 'void*', 'vtable_gen_collected_heap'],
+                      ['Q', 'Q', 'jlong', 'time_of_last_gc'],
+                      ['I', 'Q', 'HeapWord*', 'prev_used_region.start'],
+                      ['I', 'Q', 'size_t', 'prev_used_region.word_size'],
+                      ['I', 'Q', 'HeapWord*', 'reserved.start'],
+                      ['I', 'Q', 'size_t', 'reserved.word_size'],
+                  ] + VIRTUAL_SPACE_TYPE + \
+                  [
+                      ['I', 'I', 'int', 'level'],
+                      ['I', 'Q', 'ReferenceProcessor', 'ref_processor'],
+                      ['I', 'Q', 'CollectorCounters', 'gc_counters'],
+                      ['I', 'Q', 'GCStats', 'gc_stats'],
+                  ]
 
 CLASS_LOADER_DATA_TYPE = [
-    ['I', 'Q', 'oop',  'class_loader'],
-    ['I', 'Q', 'Dependencies',  'dependencies'],
-    ['I', 'Q', 'Metaspace*',  'metaspace'],
-    ['I', 'Q', 'Mutex*',  'metaspace_lock'],
-    ['B', 'B', 'bool',  'unloading'],
-    ['B', 'B', 'bool',  'keep_alive'],
-    ['B', 'B', 'bool',  'is_anonymous'],
-    ['B', 'B', 'PADDING',  'alignment'],
-    ['I', 'Q', 'volatile int',  'claimed'],
-    ['I', 'Q', 'Klass*',  'klasses'],
-    ['I', 'Q', 'JNIHandleBlock*',  'handles'],
-    ['I', 'Q', 'JNIMethodBlock*',  'jmethod_ids'],
-    ['I', 'Q', 'GrowableArray<Metadata*>*',  'deallocate_list'],
-    ['I', 'Q', 'ClassLoaderData*',  'next'],
+    ['I', 'Q', 'oop', 'class_loader'],
+    ['I', 'Q', 'Dependencies', 'dependencies'],
+    ['I', 'Q', 'Metaspace*', 'metaspace'],
+    ['I', 'Q', 'Mutex*', 'metaspace_lock'],
+    ['B', 'B', 'bool', 'unloading'],
+    ['B', 'B', 'bool', 'keep_alive'],
+    ['B', 'B', 'bool', 'is_anonymous'],
+    ['B', 'B', 'PADDING', 'alignment'],
+    ['I', 'Q', 'volatile int', 'claimed'],
+    ['I', 'Q', 'Klass*', 'klasses'],
+    ['I', 'Q', 'JNIHandleBlock*', 'handles'],
+    ['I', 'Q', 'JNIMethodBlock*', 'jmethod_ids'],
+    ['I', 'Q', 'GrowableArray<Metadata*>*', 'deallocate_list'],
+    ['I', 'Q', 'ClassLoaderData*', 'next'],
 ]
 
 METACHUNK_TYPE = [
@@ -753,10 +742,10 @@ FRAME_TYPE = [
     ['I', 'I', 'deopt_state', 'deopt_state'],
 ]
 
-#TODO figure out the appropriate size of the register map
+# TODO figure out the appropriate size of the register map
 REGISTER_MAP_TYPE = [
-    ['I', 'Q', 'intptr_t*', 'location'], #[reg_count]
-    ['I', 'Q', 'LocationValidType', 'location_valid'], # [location_valid_size]
+    ['I', 'Q', 'intptr_t*', 'location'],  # [reg_count]
+    ['I', 'Q', 'LocationValidType', 'location_valid'],  # [location_valid_size]
     ['B', 'B', 'bool', 'include_argument_oops'],
     ['3B', '3B', 'PADDING', 'padding'],
     ['I', 'Q', 'JavaThread*', 'thread'],
@@ -891,12 +880,12 @@ CALL_INFO_TYPE = [
 INTERPRETER_CODELET_TYPE = [
     ['I', 'I', 'int', 'size'],
     ['I', 'Q', 'char*', 'description'],
-    ['I', 'I', 'ByteCodes::Code', 'code'], # enum of the bytecode
+    ['I', 'I', 'ByteCodes::Code', 'code'],  # enum of the bytecode
 ]
 
 BYTECODE_CODE_TYPE = [
-    ['I', 'Q', 'address', 'bcp'], # enum of the bytecode
-    ['I', 'I', 'ByteCodes::Code', 'code'], # enum of the bytecode
+    ['I', 'Q', 'address', 'bcp'],  # enum of the bytecode
+    ['I', 'I', 'ByteCodes::Code', 'code'],  # enum of the bytecode
 ]
 
 JAVA_FRAME_ANCHOR_X86 = [
@@ -908,22 +897,22 @@ JAVA_FRAME_ANCHOR_X86 = [
 JAVA_FRAME_ANCHOR = JAVA_FRAME_ANCHOR_X86
 
 JAVA_THREAD_PARTIAL = [
-    ['I', 'Q', 'JavaThread*', '_next'],
-    ['I', 'Q', 'oop', '_threadObj'],
-] + JAVA_FRAME_ANCHOR + \
-[
-['I', 'Q', 'ThreadFunction', '_entry_point'],
-['I', 'Q', 'JNIEnv', '_jni_environment'],
-['I', 'Q', 'DeoptResourceMark*', '_deopt_mark'],
-['I', 'Q', 'intptr_t*', '_must_deopt_id'],
-['I', 'Q', 'nmethod*', '_deopt_nmethod'],
-['I', 'Q', 'vframeArray*', '_vframe_array_head'],
-['I', 'Q', 'vframeArray*', '_vframe_array_last'],
-['I', 'Q', 'GrowableArray<jvmtiDeferredLocalVariableSet*>*', '_deferred_locals_updates'],
-['I', 'Q', 'Method*', '_callee_target'],
-['I', 'Q', 'oop', '_vm_result'],
-['I', 'Q', 'Metadata*', '_vm_result_2'],
-]
+                          ['I', 'Q', 'JavaThread*', '_next'],
+                          ['I', 'Q', 'oop', '_threadObj'],
+                      ] + JAVA_FRAME_ANCHOR + \
+                      [
+                          ['I', 'Q', 'ThreadFunction', '_entry_point'],
+                          ['I', 'Q', 'JNIEnv', '_jni_environment'],
+                          ['I', 'Q', 'DeoptResourceMark*', '_deopt_mark'],
+                          ['I', 'Q', 'intptr_t*', '_must_deopt_id'],
+                          ['I', 'Q', 'nmethod*', '_deopt_nmethod'],
+                          ['I', 'Q', 'vframeArray*', '_vframe_array_head'],
+                          ['I', 'Q', 'vframeArray*', '_vframe_array_last'],
+                          ['I', 'Q', 'GrowableArray<jvmtiDeferredLocalVariableSet*>*', '_deferred_locals_updates'],
+                          ['I', 'Q', 'Method*', '_callee_target'],
+                          ['I', 'Q', 'oop', '_vm_result'],
+                          ['I', 'Q', 'Metadata*', '_vm_result_2'],
+                      ]
 
 JAVA_CALL_WRAPPER = [
     ['I', 'Q', 'JavaThread*', '_thread'],
@@ -966,7 +955,7 @@ OOP_MAP = [
     ['I', 'I', 'int', '_pc_offset'],
     ['I', 'I', 'int', '_omv_count'],
     ['I', 'Q', 'int', '_omv_data_size'],
-#    ['I', 'I', 'padding', 'padding'],
+    #    ['I', 'I', 'padding', 'padding'],
     ['I', 'Q', 'unsigned char*', '_name'],
     ['I', 'Q', 'CompressedWriteStream*', '_writer_stream'],
 ]
@@ -993,7 +982,6 @@ FRAME_VALUE = [
     ['I', 'I', 'int', 'priority'],
 ]
 
-
 FRAME_VALUES = [
     ['I', 'Q', 'GrowableArray<FrameValues>', '_values'],
 ]
@@ -1005,42 +993,42 @@ VFRAME_ARRAY_ELEMENT = [
     ['I', 'I', 'deopt_state', 'deopt_state'],
     ['I', 'Q', 'intptr_t*', '_fp'],
     ['I', 'Q', 'intptr_t*', '_unextended_sp'],
-    ['I', 'Q', 'int',  '_bci'],
+    ['I', 'Q', 'int', '_bci'],
     ['I', 'Q', 'bool', '_reexecute'],
-    ['I', 'Q', 'Method*',     '_method'],
-    ['I', 'Q', 'MonitorChunk*',  '_monitors'],
-    ['I', 'Q', 'StackValueCollection*',  '_locals'],
-    ['I', 'Q', 'StackValueCollection*',  '_expressions'],
+    ['I', 'Q', 'Method*', '_method'],
+    ['I', 'Q', 'MonitorChunk*', '_monitors'],
+    ['I', 'Q', 'StackValueCollection*', '_locals'],
+    ['I', 'Q', 'StackValueCollection*', '_expressions'],
 ]
 
 VFRAME_ARRAY = [
     ['I', 'Q', 'JavaThread*', '_owner_thread'],
     ['I', 'Q', 'vframeArray*', '_next'],
-# frame original
-['I', 'Q', 'intptr_t*', '_original_sp'],
-['I', 'Q', 'address', '_original_pc'],
-['I', 'Q', 'CodeBlob*', '_original_cb'],
-['I', 'I', 'deopt_state', '_original_deopt_state'],
-['I', 'Q', 'intptr_t*', '_original__fp'],
-['I', 'Q', 'intptr_t*', '_original__unextended_sp'],
-# frame caller
-['I', 'Q', 'intptr_t*', '_caller_sp'],
-['I', 'Q', 'address', '_caller_pc'],
-['I', 'Q', 'CodeBlob*', '_caller_cb'],
-['I', 'I', 'deopt_state', '_caller_deopt_state'],
-['I', 'Q', 'intptr_t*', '_caller__fp'],
-['I', 'Q', 'intptr_t*', '_caller__unextended_sp'],
-# frame sender
-['I', 'Q', 'intptr_t*', '_sender_sp'],
-['I', 'Q', 'address', '_sender_pc'],
-['I', 'Q', 'CodeBlob*', '_sender_cb'],
-['I', 'I', 'deopt_state', '_sender_deopt_state'],
-['I', 'Q', 'intptr_t*', '_sender__fp'],
-['I', 'Q', 'intptr_t*', '_sender__unextended_sp'],
+    # frame original
+    ['I', 'Q', 'intptr_t*', '_original_sp'],
+    ['I', 'Q', 'address', '_original_pc'],
+    ['I', 'Q', 'CodeBlob*', '_original_cb'],
+    ['I', 'I', 'deopt_state', '_original_deopt_state'],
+    ['I', 'Q', 'intptr_t*', '_original__fp'],
+    ['I', 'Q', 'intptr_t*', '_original__unextended_sp'],
+    # frame caller
+    ['I', 'Q', 'intptr_t*', '_caller_sp'],
+    ['I', 'Q', 'address', '_caller_pc'],
+    ['I', 'Q', 'CodeBlob*', '_caller_cb'],
+    ['I', 'I', 'deopt_state', '_caller_deopt_state'],
+    ['I', 'Q', 'intptr_t*', '_caller__fp'],
+    ['I', 'Q', 'intptr_t*', '_caller__unextended_sp'],
+    # frame sender
+    ['I', 'Q', 'intptr_t*', '_sender_sp'],
+    ['I', 'Q', 'address', '_sender_pc'],
+    ['I', 'Q', 'CodeBlob*', '_sender_cb'],
+    ['I', 'I', 'deopt_state', '_sender_deopt_state'],
+    ['I', 'Q', 'intptr_t*', '_sender__fp'],
+    ['I', 'Q', 'intptr_t*', '_sender__unextended_sp'],
     ['I', 'Q', 'Deoptimization::UnrollBlock*', '_unroll_block'],
     ['I', 'Q', 'int', '_frame_size'],
     ['I', 'Q', 'int', '_frames'],
     ['8I', '16Q', 'intptr_t', '_callee_registers'],
     ['8B', '16B', 'unsigned char', '_valid'],
-#    ['I', 'Q', 'vframeArrayElement', '_elements'],
+    #    ['I', 'Q', 'vframeArrayElement', '_elements'],
 ]

@@ -1,5 +1,7 @@
 import json
-from . logger import init_logger
+
+from .logger import init_logger
+
 
 class MemRange(object):
     def __init__(self, **kargs):
@@ -181,7 +183,7 @@ class MemRanges(object):
             for page in range(paddr_base, paddr_end, self.page_size):
                 self.phy_page_lookup[page] = mr
 
-    def add_mem_range(self, mem_range: MemRange, update_index = False):
+    def add_mem_range(self, mem_range: MemRange, update_index=False):
         self.mem_ranges.append(mem_range)
         self.range_by_name[mem_range.name] = mem_range
         if update_index:
@@ -190,7 +192,6 @@ class MemRanges(object):
     def valid_vaddr(self, vaddr: int) -> bool:
         addr = vaddr & self.page_size
         return addr in self.vmem_page_lookup
-
 
     def get_page(self, addr: int):
         return self.page_mask & addr
@@ -270,6 +271,8 @@ class Analysis(object):
         self.fh = None
         self.memory_loaded = False
 
+        self.objects_registry = {}
+
         self.log = init_logger(name)
 
         if radare_file_data is not None:
@@ -280,7 +283,6 @@ class Analysis(object):
 
         if load_memory_data:
             self.load_memory()
-
 
     def load_memory(self):
         if self.fh is None:
@@ -296,6 +298,8 @@ class Analysis(object):
 
     def read_vaddr(self, vaddr, sz=1):
         mr = self.mem_ranges.get_memrange_from_vaddr(vaddr)
+        if mr is None:
+            return None
         if mr.data is None and self.fh is not None:
             mr.load_memory_load_memory_range_bytes_from_file(self.fh)
             if mr.data is None:
@@ -316,7 +320,8 @@ class Analysis(object):
         self.mem_ranges = MemRanges.load_from_radare_section_json(filename=filename)
         if self.mem_ranges is None:
             raise Exception("Failed to load memory ranges")
-        self.log.debug("Loaded {} memory sections from {}".format(len(self.mem_ranges.mem_ranges), self.radare_file_data))
+        self.log.debug(
+            "Loaded {} memory sections from {}".format(len(self.mem_ranges.mem_ranges), self.radare_file_data))
         return self.mem_ranges
 
     def get_paddr_from_vaddr(self, vaddr: int):
@@ -359,3 +364,16 @@ class Analysis(object):
     @classmethod
     def update_default_read_sz(cls, sz=DEFAULT_OBJECT_READ_SZ):
         cls.DEFAULT_OBJECT_READ_SZ = sz
+
+    def add_object(self, addr, obj):
+        self.objects_registry[addr] = obj
+
+    def has_object(self, addr):
+        # TODO need to be implemented
+        return addr in self.objects_registry
+
+    def get_object(self, addr):
+        return self.objects_registry.get(addr, None)
+
+    def get_object_addresses(self):
+        return list(self.objects_registry.keys())

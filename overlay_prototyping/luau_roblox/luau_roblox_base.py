@@ -1,8 +1,10 @@
-from .. base import *
-from .luau_roblox_overlay import *
 import struct
 
+from .luau_roblox_overlay import *
+from ..base import *
+
 int_to_bytes = lambda x: struct.pack(">I", d)
+
 
 class LuauRobloxBase(BaseOverlay):
     _name = "GCHeader"
@@ -15,7 +17,6 @@ class LuauRobloxBase(BaseOverlay):
     size64 = get_size64(_overlay)
     types = get_field_types(_overlay)
 
-
     def __init__(self, **kargs):
         self.tt = -1
         self.marked = -1
@@ -25,7 +26,6 @@ class LuauRobloxBase(BaseOverlay):
 
         for k, v in kargs.items():
             setattr(self, k, v)
-
 
     def add_reference(self, analysis, ref_addr):
         self.references.add(ref_addr)
@@ -62,19 +62,6 @@ class LuauRobloxBase(BaseOverlay):
         if field_name == 'value':
             return self.raw_value()
         raise Exception("%s has no field '%s'" % (self._name, field_name))
-
-    @classmethod
-    def from_bytes(cls, addr, nbytes, analysis=None, is_32bit=False):
-        kargs = {"addr": addr, "updated": False, 'analysis': analysis,
-                 "type": cls._name, 'is_32bit': is_32bit}
-        fmt = cls.bits32
-        sz = cls.struct_size(is_32bit)
-        data_unpack = struct.unpack(fmt, nbytes[:sz])
-        nfields = cls.named32 if is_32bit else cls.named64
-        name_fields(data_unpack, nfields, fields=kargs)
-        kargs['unpacked_values'] = data_unpack
-        d = cls(**kargs)
-        return d
 
     @classmethod
     def from_file_obj(cls, fobj, addr, offset=None, analysis=None, is_32bit=False):

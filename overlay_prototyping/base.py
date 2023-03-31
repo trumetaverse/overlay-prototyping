@@ -1,6 +1,6 @@
-import re, struct
-
 import binascii
+import re
+import struct
 
 lendian_s2d = lambda sbytes: struct.unpack("<I", binascii.unhexlify(sbytes))[0]
 lendian_s2x = lambda sbytes: hex(struct.unpack("<I", binascii.unhexlify(sbytes))[0])
@@ -425,7 +425,7 @@ class BaseOverlay(object):
         cls.types = get_field_types(overlay_definition)
 
     @classmethod
-    def create_overlay(cls, name, overlay_definition, is_win=True):
+    def create_overlay(cls, name, overlay_definition, bases=None, is_win=True):
         attrs = {
             '_overlay': overlay_definition,
             'bits32': get_bits32(overlay_definition),
@@ -437,7 +437,9 @@ class BaseOverlay(object):
             'types': get_field_types(overlay_definition),
             'is_win': is_win
         }
-        new_cls = type(name, (BaseOverlay,), attrs)
+        if bases is None:
+            bases = (BaseOverlay,)
+        new_cls = type(name, bases, attrs)
         new_cls.is_win = is_win
         return new_cls
 
@@ -493,22 +495,29 @@ class BaseOverlay(object):
     def is_win(self):
         return self.get_analysis().is_win
 
-    @classmethod
-    def from_bytes(cls, addr, nbytes, analysis=None, is_32bit=True):
-        if analysis and analysis.has_internal_object(addr):
-            return analysis.get_internal_object(addr)
+    def has_internal_object(self, vaddr):
+        raise BaseException("Not implemented for this object")
 
-        fmt = cls.bits32 if is_32bit else cls.bits64
-        nfields = cls.named32 if is_32bit else cls.named64
-        sz = struct.calcsize(fmt)
+    @classmethod
+    def from_bytes(cls, addr, nbytes, analysis=None, is_32bit=False, force=True):
+        if nbytes is None:
+            return None
+        if not force and analysis and analysis.has_object(addr):
+            return analysis.get_object(addr)
+
+        kargs = {"addr": addr, "updated": False, 'analysis': analysis,
+                 "type": cls._name, 'is_32bit': is_32bit}
+        fmt = cls.bits32
+        sz = cls.struct_size(is_32bit)
+        if len(nbytes) < sz:
+            return None
         data_unpack = struct.unpack(fmt, nbytes[:sz])
-        kargs = {"addr": addr, 'analysis': analysis, 'updated': False}
-        print(data_unpack, nfields, kargs)
+        nfields = cls.named32 if is_32bit else cls.named64
         name_fields(data_unpack, nfields, fields=kargs)
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
-        if analysis:
-            analysis.add_internal_object(addr, d)
+        if analysis and d is not None:
+            analysis.add_object(addr, d)
         return d
 
     @classmethod

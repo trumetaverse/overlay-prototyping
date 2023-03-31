@@ -1,11 +1,13 @@
 import json
-from .luau_roblox_base import LuauRobloxBase, TYPES, VALID_MARKS
+
 from .consts import *
+from .luau_roblox_base import LuauRobloxBase
 
 LUAR_FILTERS = {
     "addr_is_lua_object": lambda lsr: lsr.sink_vaddr % 8 == 0,
     # "value_is_lua_object": lambda lsr: lsr.sink_value is not None and lsr.sink_value % 8 == 0,
 }
+
 
 class LuauSifterResults(object):
     def __init__(self):
@@ -31,8 +33,6 @@ class LuauSifterResults(object):
             TPROTO: self.pot_prototype,
             TCLOSURE: self.pot_closures,
         }
-
-
 
     def add_sifter_result(self, r):
         self.results[r.vaddr] = r
@@ -82,15 +82,16 @@ class LuauSifterResults(object):
 
     def get_potential_tstrings(self):
         pot_objects = list(self.pot_objects.values())
-        return sorted([i for i in pot_objects if i.tt == TSTRING and i.marked in VALID_MARKS], key=lambda u: u.sink_vaddr)
+        return sorted([i for i in pot_objects if i.tt == TSTRING and i.marked in VALID_MARKS],
+                      key=lambda u: u.sink_vaddr)
 
 
 class LuauSifterResult(object):
     KEY_VALUES = ["paddr",
-    "vaddr",
-    "sink_vaddr",
-    "sink_paddr",
-    "sink_value", "sink_paddr_base", "sink_vaddr_base", "vaddr_base", "paddr_base"
+                  "vaddr",
+                  "sink_vaddr",
+                  "sink_paddr",
+                  "sink_value", "sink_paddr_base", "sink_vaddr_base", "vaddr_base", "paddr_base"
                   ]
 
     def __init__(self, parse_gc_header=False, **kargs):
@@ -128,6 +129,7 @@ class LuauSifterResult(object):
 
     def is_valid_gc_header(self):
         return self.tt in VALID_OBJ_TYPES and self.marked in VALID_MARKS and self.padding == 0
+
     def valid_gcheader(self):
         # return self.gcheader is not None and self.gcheader.is_valid_gc_header()
         return self.is_valid_gc_header()
@@ -148,4 +150,3 @@ class LuauSifterResult(object):
 
     def __repr__(self):
         return str(self)
-

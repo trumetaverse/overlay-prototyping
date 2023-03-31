@@ -1,12 +1,10 @@
 import struct
-from jvm_overlays import KLASS_TYPE, INSTANCE_KLASS_TYPE, ARRAY_KLASS_TYPE, \
-    OBJ_ARRAY_KLASS_TYPE, TYPE_ARRAY_KLASS_TYPE, ARRAY_T_TYPE
 
+from jvm_base import BaseOverlay
+from jvm_overlays import ARRAY_T_TYPE
 from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
     get_named_array64, get_field_types, name_fields, \
-    get_named_types_dict, get_field_sizes32, \
-    get_field_sizes64, get_size32, get_size64
-from jvm_base import BaseOverlay
+    get_size32, get_size64
 
 # from jvm_klass import Klass
 # from jvm_meta import Method

@@ -1,15 +1,14 @@
 import struct
 
-from jvm_flags import AccessFlags, CPCacheEntryFlags
-from jvm_overlays import CONSTANT_POOL_META_TYPE, CP_CACHE_META_TYPE,\
-               METHOD_META_TYPE, CONST_METHOD_META_TYPE, METHOD_DATA_META_TYPE,\
-               CP_CACHE_ENTRY_META_TYPE, METHOD_COUNTERS_META_TYPE
-from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
-                         get_named_array64, get_field_types, name_fields,\
-                         get_klass, get_size32, get_size64, get_meta,\
-                         get_oaklassoop
-
 from jvm_base import BaseOverlay
+from jvm_flags import AccessFlags, CPCacheEntryFlags
+from jvm_overlays import CONSTANT_POOL_META_TYPE, CP_CACHE_META_TYPE, \
+    METHOD_META_TYPE, CONST_METHOD_META_TYPE, METHOD_DATA_META_TYPE, \
+    CP_CACHE_ENTRY_META_TYPE, METHOD_COUNTERS_META_TYPE
+from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
+    get_named_array64, get_field_types, name_fields, \
+    get_klass, get_size32, get_size64, get_meta, \
+    get_oaklassoop
 from jvm_templates import ArrayT, ARRAY_MAP
 
 
@@ -23,8 +22,9 @@ class MethodCounters(BaseOverlay):
     size32 = get_size32(METHOD_COUNTERS_META_TYPE)
     size64 = get_size64(METHOD_COUNTERS_META_TYPE)
     types = get_field_types(METHOD_COUNTERS_META_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def update_fields(self, force_update=False):
@@ -50,6 +50,7 @@ class MethodCounters(BaseOverlay):
         setattr(self, 'bec_carry', ic_carry)
         setattr(self, 'bec_count', ic_count)
 
+
 class ConstMethod(BaseOverlay):
     _name = "ConstMethod"
     _overlay = CONST_METHOD_META_TYPE
@@ -60,15 +61,16 @@ class ConstMethod(BaseOverlay):
     size32 = get_size32(CONST_METHOD_META_TYPE)
     size64 = get_size64(CONST_METHOD_META_TYPE)
     types = get_field_types(CONST_METHOD_META_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "ConstMethod class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "ConstMethod class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def update_fields(self, force_update=False):
 
@@ -110,30 +112,31 @@ class ConstMethod(BaseOverlay):
     def signature(self):
         idx = getattr(self, 'signature_index', None)
         cp = self.get_constant_pool()
-        return cp.entrys[idx] if idx < len(cp.entrys) else\
-               None
+        return cp.entrys[idx] if idx < len(cp.entrys) else \
+            None
 
     def name(self):
         idx = getattr(self, 'name_index', None)
         cp = self.get_constant_pool()
-        return cp.entrys[idx] if idx < len(cp.entrys) else\
-               None
+        return cp.entrys[idx] if idx < len(cp.entrys) else \
+            None
 
     @classmethod
     def from_bytes(cls, addr, _bytes, analysis):
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'analysis':jvm_analysis,
-                 'updated':False,"metatype":'ConstMethod',
-                 'ooptype':'', 'klasstype':'', 'is_32bit':jvm_analysis.is_32bit}
+        kargs = {"addr": addr, 'analysis': jvm_analysis,
+                 'updated': False, "metatype": 'ConstMethod',
+                 'ooptype': '', 'klasstype': '', 'is_32bit': jvm_analysis.is_32bit}
         name_fields(data_unpack, nfields, fields=kargs)
         kargs['unpacked_values'] = data_unpack
         d = ConstMethod(**kargs)
         if jvm_analysis:
             jvm_analysis.add_meta(d)
-        #d.update_fields()
+        # d.update_fields()
         return d
+
 
 class MethodData(BaseOverlay):
     _name = "MethodData"
@@ -145,15 +148,16 @@ class MethodData(BaseOverlay):
     size32 = get_size32(METHOD_DATA_META_TYPE)
     size64 = get_size64(METHOD_DATA_META_TYPE)
     types = get_field_types(METHOD_DATA_META_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "MethodData class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "MethodData class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def update_fields(self, force_update=False):
         jva = getattr(self, "jvm_analysis")
@@ -173,16 +177,17 @@ class MethodData(BaseOverlay):
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'analysis':jvm_analysis,
-                 'updated':False,"metatype":'MethodData',
-                 'ooptype':'', 'klasstype':''}
+        kargs = {"addr": addr, 'analysis': jvm_analysis,
+                 'updated': False, "metatype": 'MethodData',
+                 'ooptype': '', 'klasstype': ''}
         name_fields(data_unpack, nfields, fields=kargs)
         kargs['unpacked_values'] = data_unpack
         d = MethodData(**kargs)
         if jvm_analysis:
             jvm_analysis.add_meta(d)
-        #d.update_fields()
+        # d.update_fields()
         return d
+
 
 class Method(BaseOverlay):
     _name = "Method"
@@ -194,15 +199,16 @@ class Method(BaseOverlay):
     size32 = get_size32(METHOD_META_TYPE)
     size64 = get_size64(METHOD_META_TYPE)
     types = get_field_types(METHOD_META_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "Method class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "Method class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def update_fields(self, force_update=False):
         jva = self.get_jva()
@@ -235,14 +241,14 @@ class Method(BaseOverlay):
         cm_value = self.get_const_method()
         code_sz = cm_value.get_code_sz()
         # Method + ConstMethod
-        offset = cm_value.get_addr()+cm_value.size_aligned()
+        offset = cm_value.get_addr() + cm_value.size_aligned()
         jva = self.get_jva()
         code = jva.read(offset, code_sz)
         setattr(self, 'bci', code)
         setattr(self, 'bci_addr', offset)
         setattr(self, 'bci_size', code_sz)
 
-    def update_name (self):
+    def update_name(self):
         jva = self.get_jva()
         cm_value = self.get_const_method()
         if cm_value is None:
@@ -311,7 +317,7 @@ class Method(BaseOverlay):
         try:
             mname = self.name()
         except:
-            mname = "UNKNOWN @ 0x%08x"%self.addr
+            mname = "UNKNOWN @ 0x%08x" % self.addr
 
         if mname.find("UNKNOWN @") == 0:
             return ""
@@ -322,7 +328,7 @@ class Method(BaseOverlay):
             self.update_name()
         name_value = getattr(self, 'signature_value', None)
         if name_value is None:
-            raise BaseException("Unable to resolve method signature for: %s"%str(self))
+            raise BaseException("Unable to resolve method signature for: %s" % str(self))
         return str(name_value)
 
     def rvalue(self):
@@ -333,9 +339,9 @@ class Method(BaseOverlay):
 
     def unmangle(self):
         try:
-             return self.rvalue(), self.name(), self.parameters()
+            return self.rvalue(), self.name(), self.parameters()
         except:
-             return "UNKNOWN_RVALUE", "UNKNOWN_NAME_0x%08x"%self.addr, ["UNKNOWN_PARAMS",]
+            return "UNKNOWN_RVALUE", "UNKNOWN_NAME_0x%08x" % self.addr, ["UNKNOWN_PARAMS", ]
 
     def access_strings(self, idx=0):
         # idx is ignored
@@ -347,8 +353,8 @@ class Method(BaseOverlay):
         rvalue, name, parameters = self.unmangle()
         access = " ".join(self.access_strings())
         addr = getattr(self, 'addr')
-        return ("%s %s %s(%s);// @0x%08x"%(access, rvalue, name,
-                ",".join(parameters), addr)).strip()
+        return ("%s %s %s(%s);// @0x%08x" % (access, rvalue, name,
+                                             ",".join(parameters), addr)).strip()
 
     @classmethod
     def unmangle_arguments(cls, string):
@@ -363,7 +369,7 @@ class Method(BaseOverlay):
         pos = 0
         end = len(string)
         while pos < end:
-            used,t = cls.unmangle_type(string[pos:])
+            used, t = cls.unmangle_type(string[pos:])
             pos += used
             results.append(t)
         return results
@@ -383,16 +389,17 @@ class Method(BaseOverlay):
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False,"metatype":'Method',
-                 'ooptype':'', 'klasstype':''}
+        kargs = {"addr": addr, 'analysis': jvm_analysis, 'updated': False, "metatype": 'Method',
+                 'ooptype': '', 'klasstype': ''}
         name_fields(data_unpack, nfields, fields=kargs)
         kargs['unpacked_values'] = data_unpack
         d = Method(**kargs)
-        #d.update_fields()
+        # d.update_fields()
         if jvm_analysis:
             jvm_analysis.add_meta(d)
-        #d.update_fields()
+        # d.update_fields()
         return d
+
 
 class ConstantPool(BaseOverlay):
     _name = "ConstantPool"
@@ -404,15 +411,16 @@ class ConstantPool(BaseOverlay):
     size32 = get_size32(CONSTANT_POOL_META_TYPE)
     size64 = get_size64(CONSTANT_POOL_META_TYPE)
     types = get_field_types(CONSTANT_POOL_META_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "ConstantPool class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "ConstantPool class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def update_cache(self):
         addr = getattr(self, 'cache')
@@ -429,21 +437,21 @@ class ConstantPool(BaseOverlay):
             return True
         return False
 
-    def update_resolved_references (self):
+    def update_resolved_references(self):
         jva = self.get_jva()
         name = "resolved_references"
         addr = getattr(self, name, None)
         if addr:
-            naddr = jva.deref32(addr) if jva.is_32bit else\
-                    jva.deref64(addr)
+            naddr = jva.deref32(addr) if jva.is_32bit else \
+                jva.deref64(addr)
             oop = get_oaklassoop(jva, naddr)
             if oop:
                 oop.update_fields()
-            setattr(self, name+'_value', oop)
+            setattr(self, name + '_value', oop)
 
     def phase2_update_fields(self):
         self.update_cache()
-        #self.update_resolved_references()
+        # self.update_resolved_references()
         return
 
     def update_fields(self, force_update=False):
@@ -451,33 +459,33 @@ class ConstantPool(BaseOverlay):
 
         if self.is_updated(force_update):
             return
-        #print ("Updating %s force_update=%s updated=%s"%(str(self), force_update, self.updated))
+        # print ("Updating %s force_update=%s updated=%s"%(str(self), force_update, self.updated))
         setattr(self, "updated", True)
         name = "tags"
         addr = getattr(self, name, None)
         if addr:
             t = ArrayT.get_array(addr, jva, "Array<u1>")
-            setattr(self, name+'_value', t)
+            setattr(self, name + '_value', t)
             setattr(self, 'cp_count', t.length)
         name = "operands"
         addr = getattr(self, name, None)
         if addr:
             t = ArrayT.get_array(addr, jva, "Array<u2>")
-            setattr(self, name+'_value', t)
+            setattr(self, name + '_value', t)
         name = "reference_map"
         addr = getattr(self, name, None)
         if addr:
             t = ArrayT.get_array(addr, jva, "Array<u2>")
-            setattr(self, name+'_value', t)
+            setattr(self, name + '_value', t)
         name = "pool_holder"
         addr = getattr(self, name, None)
         klass = None
         if addr:
             klass = get_klass(jva, addr)
-            setattr(self, name+'_value', klass)
+            setattr(self, name + '_value', klass)
 
         if klass:
-            #print ("updating cp entrys for %s"%str(klass))
+            # print ("updating cp entrys for %s"%str(klass))
             self.extract_cp_entrys()
 
     def extract_cp_entrys(self):
@@ -486,20 +494,20 @@ class ConstantPool(BaseOverlay):
         base = getattr(self, 'addr')
 
         if cp_cnt == 0:
-            print ("Error: Constant pool length is 0, did you update fields 1st?")
+            print("Error: Constant pool length is 0, did you update fields 1st?")
             return
         entrys = []
         entrys_addrs = []
         setattr(self, 'entrys', entrys)
         setattr(self, 'entrys_addrs', entrys_addrs)
-        base += self.size32 if jva.is_32bit else\
-             self.size64
+        base += self.size32 if jva.is_32bit else \
+            self.size64
         # slots fall after the main constant pool structure
         incr = jva.word_sz
 
         for e in range(0, cp_cnt):
             found_item = False
-            off = base + incr*e
+            off = base + incr * e
             val = jva.read_addr(off)
             entrys_addrs.append(val)
             if jva.is_valid_addr(val):
@@ -507,7 +515,7 @@ class ConstantPool(BaseOverlay):
                     sym = jva.lookup_internal_symbol_only(val)
                     entrys.append(sym)
                     found_item = True
-                #elif jva.lookup_known_oop(val):
+                # elif jva.lookup_known_oop(val):
                 #    oop = jva.lookup_known_oop_only(val)
                 #    found_item = True
                 #    entrys.append(oop)
@@ -516,44 +524,43 @@ class ConstantPool(BaseOverlay):
                 entrys.append(None)
         return entrys
 
-    def get_entry (self, idx=0):
+    def get_entry(self, idx=0):
         entrys = getattr(self, 'entrys', None)
         if entrys is None:
             raise BaseException("Could not retrieve the CP entrys")
         elif idx < len(entrys):
             return entrys[idx]
         return None
-            #raise BaseException("Could not retrieve entry, too many")
-
+        # raise BaseException("Could not retrieve entry, too many")
 
     def get_pool_holder(self):
         return getattr(self, 'pool_holder_value', None)
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        #print hex(addr), len(bytes), Klass.bits32, Klass.size32
+        # print hex(addr), len(bytes), Klass.bits32, Klass.size32
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         if bytes is None:
             return None
-        if jvm_analysis.has_internal_object(addr):
-            return jvm_analysis.get_internal_object(addr)
+        if jvm_analysis.has_object(addr):
+            return jvm_analysis.get_object(addr)
 
-
-        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False,"metatype":'ConstantPool',
-                 'ooptype':'', 'klasstype':'', 'cp_count':0, 'entrys':[]}
+        kargs = {"addr": addr, 'analysis': jvm_analysis, 'updated': False, "metatype": 'ConstantPool',
+                 'ooptype': '', 'klasstype': '', 'cp_count': 0, 'entrys': []}
         data_unpack = struct.unpack(fmt, _bytes)
         name_fields(data_unpack, nfields, fields=kargs)
 
         kargs['unpacked_values'] = data_unpack
-        #if paddr:
+        # if paddr:
         #    kargs['pool_holder_value'] = get_klass(jvm_analysis, addr)
         d = ConstantPool(**kargs)
         if jvm_analysis:
             jvm_analysis.add_meta(d)
         d.update_fields()
-        #setattr(d, "updated", False)
+        # setattr(d, "updated", False)
         return d
+
 
 class CPCacheEntry(BaseOverlay):
     _name = "CPCacheEntry"
@@ -565,15 +572,16 @@ class CPCacheEntry(BaseOverlay):
     size32 = get_size32(CP_CACHE_ENTRY_META_TYPE)
     size64 = get_size64(CP_CACHE_ENTRY_META_TYPE)
     types = get_field_types(CP_CACHE_ENTRY_META_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "CPCacheEntry class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "CPCacheEntry class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def update_fields(self, force_update=False):
         if self.is_updated(force_update):
@@ -595,7 +603,7 @@ class CPCacheEntry(BaseOverlay):
         f2_value = None
         ref_klass = None
         psize = 0
-        #print ("before updating cache entry info")
+        # print ("before updating cache entry info")
         if flags_info['entry_type'] == 'field':
             f1_value = jva.lookup_known_klass(f1)
             ref_klass = f1_value
@@ -611,9 +619,8 @@ class CPCacheEntry(BaseOverlay):
             if flags_info['is_interface_vcall']:
                 f1_value = jva.lookup_known_klass(f1)
             else:
-                #f1_value = jva.lookup_known_method(f1)
+                # f1_value = jva.lookup_known_method(f1)
                 f1_value = jva.get_method_only(f1)
-
 
             setattr(self, 'invoke_code_f1', b1)
             setattr(self, 'invoke_code_f2', b2)
@@ -631,8 +638,6 @@ class CPCacheEntry(BaseOverlay):
             elif f1_value is None:
                 f2_value = jva.lookup_known_meta(f2)
 
-
-
         setattr(self, 'f2_info', f2_info)
         setattr(self, 'f1_info', f1_info)
         setattr(self, 'f2_value', f2_value)
@@ -645,7 +650,7 @@ class CPCacheEntry(BaseOverlay):
         if ref_klass:
             cp = ref_klass.get_constant_pool()
             setattr(self, 'cp_entry_value', cp.get_entry(cp_index))
-        #print ("done updating cache entry")
+        # print ("done updating cache entry")
 
 
 class CPCache(BaseOverlay):
@@ -658,30 +663,31 @@ class CPCache(BaseOverlay):
     size32 = get_size32(CP_CACHE_META_TYPE)
     size64 = get_size64(CP_CACHE_META_TYPE)
     types = get_field_types(CP_CACHE_META_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def __str__(self):
         name_value = getattr(self, "name_value", None)
         if name_value:
             return str(name_value)
-        return "CPCache class @ 0x%08x"%(getattr(self, "addr", -1))
+        return "CPCache class @ 0x%08x" % (getattr(self, "addr", -1))
 
     def read_cp_entry_at_idx(self, idx):
         addr = self.get_entry_offset(idx)
         entry = CPCacheEntry.from_jva(addr, self.get_jva())
-        #print ("Created CPEntry address = 0x%08x"%entry.addr)
+        # print ("Created CPEntry address = 0x%08x"%entry.addr)
         return entry
 
     def get_length(self):
         return getattr(self, 'length')
 
     def update_entrys(self):
-        #print ("Updating cache entrys")
+        # print ("Updating cache entrys")
         pos = 0
         for e in getattr(self, "cp_cache_entrys"):
-            #print ("Updating cache entry: %d"%pos)
+            # print ("Updating cache entry: %d"%pos)
             if e:
                 e.update_fields()
             pos += 1
@@ -690,32 +696,32 @@ class CPCache(BaseOverlay):
         if self.is_updated(force_update):
             return
         setattr(self, "updated", True)
-        cp_cache_entrys = getattr(self, "cp_cache_entrys" )
+        cp_cache_entrys = getattr(self, "cp_cache_entrys")
         idx = 0
         end = self.get_length()
         while idx < end:
-            #print ("Updating cache entry: %d out of %d"%(idx, end))
+            # print ("Updating cache entry: %d out of %d"%(idx, end))
             cp_entry = self.read_cp_entry_at_idx(idx)
             cp_cache_entrys[idx] = cp_entry
-            #print ("Done updating cache entry: %d out of %d"%(idx, end))
-            #cp_entry.update_fields()
+            # print ("Done updating cache entry: %d out of %d"%(idx, end))
+            # cp_entry.update_fields()
             idx += 1
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        #print hex(addr), len(bytes), Klass.bits32, Klass.size32
+        # print hex(addr), len(bytes), Klass.bits32, Klass.size32
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
 
         if _bytes is None:
             return None
-        if jvm_analysis.has_internal_object(addr):
-            return jvm_analysis.get_internal_object(addr)
+        if jvm_analysis.has_object(addr):
+            return jvm_analysis.get_object(addr)
 
-        kargs = {"addr":addr,'analysis':jvm_analysis,
-                 'updated':False,"metatype":'ConstantPoolCache',
-                 'ooptype':'', 'klasstype':'',
-                 'is_32bit':jvm_analysis.is_32bit}
+        kargs = {"addr": addr, 'analysis': jvm_analysis,
+                 'updated': False, "metatype": 'ConstantPoolCache',
+                 'ooptype': '', 'klasstype': '',
+                 'is_32bit': jvm_analysis.is_32bit}
         data_unpack = struct.unpack(fmt, _bytes)
         name_fields(data_unpack, nfields, fields=kargs)
 
@@ -729,17 +735,17 @@ class CPCache(BaseOverlay):
         d = CPCache(**kargs)
         if jvm_analysis:
             jvm_analysis.add_meta(d)
-        #d.update_fields()
-        #d.update_klasses(jvm_analysis)
+        # d.update_fields()
+        # d.update_klasses(jvm_analysis)
         return d
 
     def get_entry_offset(self, idx=0):
         jva = self.get_jva()
-        cp_cache_entry_sz = CPCacheEntry.header_size32() if jva.is_32bit else\
-                            CPCacheEntry.header_size64()
+        cp_cache_entry_sz = CPCacheEntry.header_size32() if jva.is_32bit else \
+            CPCacheEntry.header_size64()
         if idx < getattr(self, "length", 0):
-            return self.get_addr() + self.header_size() +\
-                   idx * cp_cache_entry_sz
+            return self.get_addr() + self.header_size() + \
+                idx * cp_cache_entry_sz
         raise BaseException("Index exceeds cache length")
 
     def get_entry(self, idx=0):
@@ -750,4 +756,4 @@ class CPCache(BaseOverlay):
 
 
 ARRAY_MAP['Method'] = Method
-#ARRAY_MAP['Method*'] = Method
+# ARRAY_MAP['Method*'] = Method

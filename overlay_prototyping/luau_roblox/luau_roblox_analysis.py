@@ -1,11 +1,12 @@
 import string
 from threading import Thread
-from ..analysis import Analysis
-from ..base import BaseException
-from .luau_roblox_base import LuauRobloxBase
-from .luau_roblox_tstring import LuauRobloxTstring
-from .enumerate_luau_roblox import LuauSifterResults
+
 from .consts import *
+from .enumerate_luau_roblox import LuauSifterResults
+from .luau_roblox_base import LuauRobloxBase
+from .luau_roblox_overlay import LuauRW_TString
+from ..analysis import Analysis, MemRange
+from ..base import BaseException
 
 
 class LuauRobloxAnalysis(Analysis):
@@ -13,7 +14,6 @@ class LuauRobloxAnalysis(Analysis):
     def __init__(self, sift_results=None, **kargs):
         super(LuauRobloxAnalysis, self).__init__(name="LuauRobloxAnalysis", **kargs)
         self.lrss = None
-        self.objects = {}
         self.strings = {}
         self.prims = {}
         self.load_srt = None
@@ -24,18 +24,26 @@ class LuauRobloxAnalysis(Analysis):
         self.sift_results_loaded = False
         self.anchor_objects = {}
         self.anchor_sections = {}
-        self.objects_by_anchor_sections = {}
+        self._anchor_mr = {}
+        self.objects_by_anchor_section = {}
+        self.word_sz = kargs.get('word_sz', 4)
+        if self.word_sz is None:
+            self.word_sz = 4
 
     def add_object_reference(self, obj_vaddr, ref_address):
-        if obj_vaddr in self.objects:
-            self.objects[obj_vaddr].add_reference(self, ref_address)
+        obj = self.get_object(obj_vaddr)
+        if obj is None:
+            return
 
-    def add_object(self, obj, ref_addr=None):
+        obj.add_reference(self, ref_address)
+
+    def add_object(self, addr, obj, ref_addr=None):
         if obj is None:
             return
         vaddr = obj.addr
-        self.objects[vaddr] = obj
-        if obj.is_string() and len(str(obj.value)) > 0:
+        super(LuauRobloxAnalysis, self).add_object(vaddr, obj)
+
+        if obj.is_string() and len(str(obj.get_value())) > 0:
             self.strings[vaddr] = obj
 
         if obj.is_prim():
@@ -83,9 +91,9 @@ class LuauRobloxAnalysis(Analysis):
         if vaddr in self.strings:
             return self.strings[vaddr]
         data = self.read_vaddr(vaddr, self.DEFAULT_OBJECT_READ_SZ)
-        s = LuauRobloxTstring.from_bytes(vaddr, data, analysis=self, is_32bit=True)
-        if s is not None and s.tt == TSTRING:
-            self.add_object(s, ref_vaddr)
+        s = LuauRW_TString.from_bytes(vaddr, data, analysis=self, word_sz=self.word_sz)
+        if s is not None and s.is_valid_gc_header() and s.get_gch().tt == TSTRING:
+            self.add_object(s.addr, s, ref_vaddr)
         return s
 
     def find_lua_strings_from_sift_file(self):
@@ -100,7 +108,8 @@ class LuauRobloxAnalysis(Analysis):
     def get_potential_objects_from_sifter(self, tt):
         results = []
         for o in self.lrss.get_potential_objects():
-            if o.tt == tt and o.marked in VALID_MARKS:
+            # this is a sifter result and not an object
+            if o.is_valid_gc_header() and o.tt == tt:
                 results.append(o)
         return results
 
@@ -125,8 +134,9 @@ class LuauRobloxAnalysis(Analysis):
     def potentials_upvals(self):
         return self.get_potential_objects_from_sifter(TUPVAL)
 
-    def create_class(self, name, overlay):
-        return LuauRobloxBase.create_overlay(name, overlay)
+    @classmethod
+    def create_class(cls, name, overlay):
+        return LuauRobloxBase.create_overlay(name, overlay, bases=(LuauRobloxBase,))
 
     def create_object_at(self, name, overlay, vaddr, sz=8192):
         cls = LuauRobloxBase.create_overlay(name, overlay)
@@ -142,7 +152,7 @@ class LuauRobloxAnalysis(Analysis):
         if mr is None:
             return results
 
-        for v in self.objects:
+        for v in self.get_object_addresses():
             addr = v.sink_vaddr
             if mr.start <= addr < mr.end:
                 results.append(v)
@@ -155,6 +165,8 @@ class LuauRobloxAnalysis(Analysis):
             return results
         pot_objects = self.lrss.get_potential_objects()
         for v in pot_objects:
+            if not v.is_valid_gc_header():
+                continue
             addr = v.sink_vaddr
             if mr.start <= addr < mr.end:
                 results.append(v)
@@ -178,7 +190,7 @@ class LuauRobloxAnalysis(Analysis):
         if mr is None:
             return results
         sinks = self.lrss.results.items()
-        for k,v in sinks:
+        for k, v in sinks:
             addr = k
             if mr.start <= addr < mr.end:
                 results.append(v)
@@ -194,7 +206,6 @@ class LuauRobloxAnalysis(Analysis):
             self.add_string_at_vaddr(vaddr, ref_vaddr=ref_vaddr)
         return self.get_strings()
 
-
     def find_anchor_strings(self):
         if not self.is_sift_results_loaded():
             self.load_sift_results()
@@ -202,7 +213,7 @@ class LuauRobloxAnalysis(Analysis):
 
         anchor_objects = {}
         for s in lua_strings.values():
-            value = None if s is None or s.value is None else s.value
+            value = None if not isinstance(s, LuauRW_TString) else s.get_value()
             if len(str(value)) == 0:
                 continue
             if value in LUAR_ROBLOX_TYPES or value in LUAR_ROBLOX_EVENT_NAMES:
@@ -221,11 +232,12 @@ class LuauRobloxAnalysis(Analysis):
         return self.anchor_objects
 
     def check_string(self, obj):
+        value = obj.get_value() if hasattr(obj, 'get_value') else None
         if obj.marked == 0 or obj.marked not in VALID_MARKS:
             return False
-        elif len(str(obj.value)) == 0 and len(obj.value) > 8:
+        elif len(str(value)) == 0 and len(value) > 8:
             return False
-        elif len(obj.value) > 1024 and not all([i in string.printable for i in obj.value]):
+        elif len(value) > 1024 and not all([i in string.printable for i in value]):
             return False
         return True
 
@@ -242,36 +254,54 @@ class LuauRobloxAnalysis(Analysis):
         if len(self.anchor_sections) == 0:
             self.find_anchor_pages()
 
-        anchor_ranges = [i['memory_range'] for i in self.anchor_sections.values()]
-        sifter_results = self.get_potential_objects_from_sifter(obj_tt)
-        check = lambda addr: any([mr.vaddr <= addr <= mr.vsize for mr in anchor_ranges])
-        for sr in sifter_results:
-            if check(sr.vaddr):
-                results.append(sr)
+        pot_objects = self.get_potential_objects_from_sifter(obj_tt)
+        mrs = [i['memory_range'] for i in self.anchor_sections.values()]
+        results = [i for i in pot_objects if any([mr.vaddr <= i.sink_vaddr < mr.vaddr + mr.vsize for mr in mrs])]
         return results
 
     def enumerate_objects_in_anchor_sections(self):
         lua_strings = self.get_strings_from_sifter_results()
         for base_vaddr, as_json in self.anchor_sections.items():
             mr = as_json['memory_range']
-            self.objects_by_anchor_sections[base_vaddr] = {'object_vaddrs': {}, 'memory_range':mr}
-            addrs = [k for k in self.objects if mr.vaddr_in_range(k)]
-            self.objects_by_anchor_sections[base_vaddr]['object_vaddrs'] = set(addrs)
-            self.objects_by_anchor_sections[base_vaddr]['objects'] = {a: self.objects[a] for a in addrs}
-            self.objects_by_anchor_sections[base_vaddr]['strings'] = {a: self.objects[a] for a in addrs}
+            self.objects_by_anchor_section[base_vaddr] = {'object_vaddrs': {}, 'memory_range': mr}
+            addrs = [k for k in self.get_object_addresses() if mr.vaddr_in_range(k)]
+            self.objects_by_anchor_section[base_vaddr]['object_vaddrs'] = set(addrs)
+            self.objects_by_anchor_section[base_vaddr]['objects'] = {a: self.get_object(a) for a in addrs}
+            self.objects_by_anchor_section[base_vaddr]['strings'] = {a: self.get_object(a) for a in addrs}
         return self.objects_by_anchor_section
-
 
     def find_anchor_pages(self):
         ao_dict = self.find_anchor_strings()
         for ao in ao_dict.values():
             vaddr = ao.addr
             mr = self.get_memrange(vaddr)
-            base_vaddr = mr.vaddr
-            if base_vaddr not in self.anchor_sections:
-                self.anchor_sections[base_vaddr] = {"memory_range": mr, 'cnt': 0, 'objects':{} }
-
-            self.anchor_sections[base_vaddr]['objects'][ao.addr] = ao
-            self.anchor_sections[base_vaddr]['cnt'] = len(self.anchor_sections[base_vaddr]['objects'])
-
+            if mr is None:
+                continue
+            self.add_anchor_section(mr, vaddr, ao)
+            self._anchor_mr[mr.vaddr] = mr
         return self.anchor_sections
+
+    def add_anchor_section(self, mr, vaddr, obj):
+        if mr is None:
+            return
+        base_vaddr = mr.vaddr
+        if base_vaddr not in self.anchor_sections:
+            self.anchor_sections[base_vaddr] = {"memory_range": mr, 'cnt': 0, 'objects': {}}
+
+        if obj is None:
+            return
+
+        self.anchor_sections[base_vaddr]['objects'][vaddr] = obj
+        self.anchor_sections[base_vaddr]['cnt'] = len(self.anchor_sections[base_vaddr]['objects'])
+
+    def in_anchor_section(self, vaddr):
+        for base, mr in self._anchor_mr:
+            if mr.vaddr_in_range(vaddr):
+                return True
+        return False
+
+    def get_anchor_section(self, vaddr) -> MemRange:
+        for base, mr in self._anchor_mr:
+            if mr.vaddr_in_range(vaddr):
+                return mr
+        return None

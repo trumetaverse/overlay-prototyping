@@ -1,19 +1,20 @@
 import struct
 
-from jvm_overlays import CHAR_OOP_TYPE, BYTE_OOP_TYPE, INT_OOP_TYPE,\
-            LONG_OOP_TYPE, SHORT_OOP_TYPE, BOOL_OOP_TYPE, DOUBLE_OOP_TYPE,\
-            FLOAT_OOP_TYPE
-
-from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
-                         get_named_array64, get_field_types, get_size32,\
-                         get_size64
 from jvm_base import BaseOverlay
+from jvm_overlays import CHAR_OOP_TYPE, BYTE_OOP_TYPE, INT_OOP_TYPE, \
+    LONG_OOP_TYPE, SHORT_OOP_TYPE, BOOL_OOP_TYPE, DOUBLE_OOP_TYPE, \
+    FLOAT_OOP_TYPE
+from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
+    get_named_array64, get_field_types, get_size32, \
+    get_size64
 
 
 class IntKlass:
     _name = "Integer"
+
     def __str__(self):
         return self._name
+
 
 class ByteOop(BaseOverlay):
     _name = "ByteOop"
@@ -25,17 +26,18 @@ class ByteOop(BaseOverlay):
     size32 = get_size32(BYTE_OOP_TYPE)
     size64 = get_size64(BYTE_OOP_TYPE)
     types = get_field_types(BYTE_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -49,11 +51,11 @@ class ByteOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':False,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': False,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
-        #if not v is None:
+        # if not v is None:
         #    v = bytes(v)
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -64,18 +66,19 @@ class ByteOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':analysis,
-                  "ooptype":cls._name, "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': analysis,
+                 "ooptype": cls._name, "klasstype": ""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
         kargs['value'] = data_unpack
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class CharOop(BaseOverlay):
     _name = "CharOop"
@@ -87,17 +90,18 @@ class CharOop(BaseOverlay):
     size32 = get_size32(CHAR_OOP_TYPE)
     size64 = get_size64(CHAR_OOP_TYPE)
     types = get_field_types(CHAR_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -111,9 +115,9 @@ class CharOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':False,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': False,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -124,19 +128,20 @@ class CharOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, analysis):
         jva = jvm_analysis
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis,
-                  "ooptype":cls._name, "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis,
+                 "ooptype": cls._name, "klasstype": ""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
         kargs['value'] = "".join(data_unpack)
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class DoubleOop(BaseOverlay):
     _name = "DoubleOop"
@@ -148,17 +153,18 @@ class DoubleOop(BaseOverlay):
     size32 = get_size32(DOUBLE_OOP_TYPE)
     size64 = get_size64(DOUBLE_OOP_TYPE)
     types = get_field_types(DOUBLE_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -172,9 +178,9 @@ class DoubleOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':False,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': False,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -185,18 +191,19 @@ class DoubleOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis,
-                    "ooptype":cls._name, "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis,
+                 "ooptype": cls._name, "klasstype": ""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
         kargs['value'] = data_unpack
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class FloatOop(BaseOverlay):
     _name = "FloatOop"
@@ -208,17 +215,18 @@ class FloatOop(BaseOverlay):
     size32 = get_size32(FLOAT_OOP_TYPE)
     size64 = get_size64(FLOAT_OOP_TYPE)
     types = get_field_types(FLOAT_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -232,9 +240,9 @@ class FloatOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':False,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': False,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -245,19 +253,20 @@ class FloatOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
         jva = jvm_analysis
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
         kargs['value'] = data_unpack
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class IntOop(BaseOverlay):
     _name = "IntOop"
@@ -269,17 +278,18 @@ class IntOop(BaseOverlay):
     size32 = get_size32(INT_OOP_TYPE)
     size64 = get_size64(INT_OOP_TYPE)
     types = get_field_types(INT_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -293,9 +303,9 @@ class IntOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':False,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': False,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -306,18 +316,19 @@ class IntOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis,
-                    "ooptype":cls._name, "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis,
+                 "ooptype": cls._name, "klasstype": ""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
         kargs['value'] = data_unpack
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class LongOop(BaseOverlay):
     _name = "LongOop"
@@ -329,17 +340,18 @@ class LongOop(BaseOverlay):
     size32 = get_size32(LONG_OOP_TYPE)
     size64 = get_size64(LONG_OOP_TYPE)
     types = get_field_types(LONG_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -353,9 +365,9 @@ class LongOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':False,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': False,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -366,18 +378,19 @@ class LongOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
         kargs['value'] = data_unpack
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class ShortOop(BaseOverlay):
     _name = "ShortOop"
@@ -389,17 +402,18 @@ class ShortOop(BaseOverlay):
     size32 = get_size32(SHORT_OOP_TYPE)
     size64 = get_size64(SHORT_OOP_TYPE)
     types = get_field_types(SHORT_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -413,9 +427,9 @@ class ShortOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':False,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': False,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -426,18 +440,19 @@ class ShortOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
         kargs['value'] = data_unpack
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class BoolOop(BaseOverlay):
     _name = "BoolOop"
@@ -449,17 +464,18 @@ class BoolOop(BaseOverlay):
     size32 = get_size32(BOOL_OOP_TYPE)
     size64 = get_size64(BOOL_OOP_TYPE)
     types = get_field_types(BOOL_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -474,9 +490,9 @@ class BoolOop(BaseOverlay):
     def python_value(self, bread_crumbs={}, **kargs):
         v = self.raw_value()
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':False,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': False,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         v = v > 0 if v else False
         bread_crumbs[self.addr]['value'] = v
@@ -488,12 +504,12 @@ class BoolOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack, = struct.unpack(fmt, _bytes)
         kargs['value'] = data_unpack
@@ -512,17 +528,18 @@ class ByteArrayOop(BaseOverlay):
     size32 = get_size32(BYTE_OOP_TYPE)
     size64 = get_size64(BYTE_OOP_TYPE)
     types = get_field_types(BYTE_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -537,11 +554,11 @@ class ByteArrayOop(BaseOverlay):
     def python_value(self, bread_crumbs={}, **kargs):
         v = self.raw_value()
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
-        #if not v is None:
+        # if not v is None:
         #    v = bytes(v)
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -552,18 +569,19 @@ class ByteArrayOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
         kargs['value'] = "".join(data_unpack)
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class CharArrayOop(BaseOverlay):
     _name = "CharArrayOop"
@@ -575,17 +593,18 @@ class CharArrayOop(BaseOverlay):
     size32 = get_size32(CHAR_OOP_TYPE)
     size64 = get_size64(CHAR_OOP_TYPE)
     types = get_field_types(CHAR_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -600,9 +619,9 @@ class CharArrayOop(BaseOverlay):
     def python_value(self, bread_crumbs={}, **kargs):
         v = self.raw_value()
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -613,18 +632,19 @@ class CharArrayOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
         kargs['value'] = "".join(data_unpack)
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class DoubleArrayOop(BaseOverlay):
     _name = "DoubleArrayOop"
@@ -636,17 +656,18 @@ class DoubleArrayOop(BaseOverlay):
     size32 = get_size32(DOUBLE_OOP_TYPE)
     size64 = get_size64(DOUBLE_OOP_TYPE)
     types = get_field_types(DOUBLE_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -661,9 +682,9 @@ class DoubleArrayOop(BaseOverlay):
     def python_value(self, bread_crumbs={}, **kargs):
         v = self.raw_value()
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -674,18 +695,19 @@ class DoubleArrayOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
         kargs['value'] = "".join(data_unpack)
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class FloatArrayOop(BaseOverlay):
     _name = "FloatArrayOop"
@@ -697,17 +719,18 @@ class FloatArrayOop(BaseOverlay):
     size32 = get_size32(FLOAT_OOP_TYPE)
     size64 = get_size64(FLOAT_OOP_TYPE)
     types = get_field_types(FLOAT_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -721,9 +744,9 @@ class FloatArrayOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -731,18 +754,19 @@ class FloatArrayOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
         kargs['value'] = "".join(data_unpack)
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class IntArrayOop(BaseOverlay):
     _name = "IntArrayOop"
@@ -754,17 +778,18 @@ class IntArrayOop(BaseOverlay):
     size32 = get_size32(INT_OOP_TYPE)
     size64 = get_size64(INT_OOP_TYPE)
     types = get_field_types(INT_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -778,9 +803,9 @@ class IntArrayOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -788,18 +813,19 @@ class IntArrayOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
         kargs['value'] = "".join(data_unpack)
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class LongArrayOop(BaseOverlay):
     _name = "LongArrayOop"
@@ -811,17 +837,18 @@ class LongArrayOop(BaseOverlay):
     size32 = get_size32(LONG_OOP_TYPE)
     size64 = get_size64(LONG_OOP_TYPE)
     types = get_field_types(LONG_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -835,9 +862,9 @@ class LongArrayOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -845,18 +872,19 @@ class LongArrayOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
         kargs['value'] = "".join(data_unpack)
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class ShortArrayOop(BaseOverlay):
     _name = "ShortArrayOop"
@@ -868,17 +896,18 @@ class ShortArrayOop(BaseOverlay):
     size32 = get_size32(SHORT_OOP_TYPE)
     size64 = get_size64(SHORT_OOP_TYPE)
     types = get_field_types(SHORT_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -892,9 +921,9 @@ class ShortArrayOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -902,19 +931,20 @@ class ShortArrayOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
         jva = jvm_analysis
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
         kargs['value'] = "".join(data_unpack)
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         return d
+
 
 class BoolArrayOop(BaseOverlay):
     _name = "BoolArrayOop"
@@ -926,17 +956,18 @@ class BoolArrayOop(BaseOverlay):
     size32 = get_size32(BOOL_OOP_TYPE)
     size64 = get_size64(BOOL_OOP_TYPE)
     types = get_field_types(BOOL_OOP_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_klass_prim(self):
         return True
 
     def __str__(self):
-        #a = "0x%08x "%getattr(self, 'addr', '')
-        #a = a + getattr(self, '_name', '')
-        #a = a + " value: "+ str(getattr(self, 'value', ''))
+        # a = "0x%08x "%getattr(self, 'addr', '')
+        # a = a + getattr(self, '_name', '')
+        # a = a + " value: "+ str(getattr(self, 'value', ''))
         return str(getattr(self, 'value', ''))
 
     def update_fields(self, force_update=False):
@@ -950,9 +981,9 @@ class BoolArrayOop(BaseOverlay):
 
     def python_value(self, bread_crumbs={}, **kargs):
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -960,12 +991,12 @@ class BoolArrayOop(BaseOverlay):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        kargs = { "addr":addr, "updated":False, 'analysis':jvm_analysis, "ooptype":cls._name,
-                  "klasstype":""}
+        kargs = {"addr": addr, "updated": False, 'analysis': jvm_analysis, "ooptype": cls._name,
+                 "klasstype": ""}
         fmt = cls.bits32
         data_unpack = struct.unpack(fmt, _bytes)
         kargs['value'] = "".join(data_unpack)

@@ -1,17 +1,19 @@
-import struct
-import numpy as np
 import string
+import struct
 
-from jvm_overlays import SYMBOL_TABLE_BUCKET_TYPE, SYMBOL_TABLE_TYPE,\
-                         SYMBOL_TABLE_ENTRY_TYPE, SYMBOL_TYPE
-
-from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
-                         get_named_array64, get_field_types, name_fields, \
-                         get_size32, get_size64
+import numpy as np
 
 from jvm_base import BaseOverlay
+from jvm_overlays import SYMBOL_TABLE_BUCKET_TYPE, SYMBOL_TABLE_TYPE, \
+    SYMBOL_TABLE_ENTRY_TYPE, SYMBOL_TYPE
+from jvm_overlays import get_bits32, get_bits64, get_named_array32, \
+    get_named_array64, get_field_types, name_fields, \
+    get_size32, get_size64
+
 END_IT_SIZE = 60000
 MAX_NUM_SYMBOLS = 65536
+
+
 class Symbol(BaseOverlay):
     _name = "Symbol"
     _overlay = SYMBOL_TYPE
@@ -22,8 +24,9 @@ class Symbol(BaseOverlay):
     size32 = get_size32(SYMBOL_TYPE)
     size64 = get_size64(SYMBOL_TYPE)
     types = get_field_types(SYMBOL_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def is_symbol(self):
@@ -37,7 +40,6 @@ class Symbol(BaseOverlay):
             return v
         return repr(v)
 
-
     def update_fields(self, force_update=False):
         setattr(self, 'updated', True)
 
@@ -49,45 +51,45 @@ class Symbol(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, analysis):
-        if analysis and jvm_analysis.has_internal_object(addr):
+        if analysis and jvm_analysis.has_object(addr):
             sym = jvm_analysis.lookup_internal_symbol_only(addr)
             if sym and sym._name != "Symbol":
                 raise BaseException("Symbol is not a symbol @ 0x%08x")
             elif sym:
                 return sym
-        #print ("In symbol 0x%08x type(bytes)=%s fmt=%s"%(addr, str(type(bytes)), fmt))
+        # print ("In symbol 0x%08x type(bytes)=%s fmt=%s"%(addr, str(type(bytes)), fmt))
         if bytes is None:
             return None
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr": addr, 'analysis': jvm_analysis, 'updated': False}
         if jvm_analysis.is_32bit:
             name_fields(data_unpack, Symbol.named32, fields=kargs)
         else:
             name_fields(data_unpack, Symbol.named64, fields=kargs)
 
-
         kargs['jbyte'] = None
         _length = kargs['length']
-        if _length > 300 :
-            print ("Warning: really long symbol length (%d) at 0x%08x"%(_length, addr))
-            #return None
+        if _length > 300:
+            print("Warning: really long symbol length (%d) at 0x%08x" % (_length, addr))
+            # return None
         if _length > 1500:
-            print ("WARNING: Symbol extremely long length (%d) at 0x%08x"%(_length, addr))
-            #return None
+            print("WARNING: Symbol extremely long length (%d) at 0x%08x" % (_length, addr))
+            # return None
         if _length >= END_IT_SIZE:
-            print ("WARNING: Symbol extremely long length (%d) at 0x%08x, bailing!"%(_length, addr))
-            raise Exception("WARNING: Symbol extremely long length (%d) at 0x%08x"%(_length, addr))
+            print("WARNING: Symbol extremely long length (%d) at 0x%08x, bailing!" % (_length, addr))
+            raise Exception("WARNING: Symbol extremely long length (%d) at 0x%08x" % (_length, addr))
 
         # there is a dummy byte in there for the "jbyte"
         if jvm_analysis.is_32bit:
-            kargs['jbyte'] = jvm_analysis.read(addr+Symbol.size32-1, _length)
+            kargs['jbyte'] = jvm_analysis.read(addr + Symbol.size32 - 1, _length)
         else:
-            kargs['jbyte'] = jvm_analysis.read(addr+Symbol.size64-1, _length)
+            kargs['jbyte'] = jvm_analysis.read(addr + Symbol.size64 - 1, _length)
         d = Symbol(**kargs)
         if jvm_analysis:
             jvm_analysis.insert_symbol(addr, d)
         return d
+
 
 class SymbolTableEntry(BaseOverlay):
     _name = "HashTableEntry<Symbol*>"
@@ -99,16 +101,17 @@ class SymbolTableEntry(BaseOverlay):
     size32 = get_size32(SYMBOL_TABLE_ENTRY_TYPE)
     size64 = get_size64(SYMBOL_TABLE_ENTRY_TYPE)
     types = get_field_types(SYMBOL_TABLE_ENTRY_TYPE)
+
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
-    def __str__ (self):
+    def __str__(self):
         literal = getattr(self, 'literal', -1)
         hash_ = getattr(self, 'hash', -1)
         Symbol_value = getattr(self, 'Symbol_value', None)
-        return (" _hash = 0x%08x Symbol@0x%08x->%s "%(hash_, \
-            literal, str(Symbol_value)))
+        return (" _hash = 0x%08x Symbol@0x%08x->%s " % (hash_, \
+                                                        literal, str(Symbol_value)))
 
     def update_fields(self, force_update=False):
         setattr(self, 'updated', True)
@@ -138,22 +141,22 @@ class SymbolTableEntry(BaseOverlay):
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        #if jvm_analysis and jvm_analysis.has_internal_object(addr):
+        # if jvm_analysis and jvm_analysis.has_internal_object(addr):
         #    return jvm_analysis.get_internal_object(addr)
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr": addr, 'analysis': jvm_analysis, 'updated': False}
         name_fields(data_unpack, nfields, fields=kargs)
         _next = kargs['next']
         kargs['has_next'] = _next != 0 and \
-                            jvm_analysis.is_valid_addr(_next) and\
+                            jvm_analysis.is_valid_addr(_next) and \
                             jvm_analysis.read_addr(_next) != 0
 
         kargs['next_value'] = None
         if kargs['has_next']:
             kargs['next_value'] = SymbolTableEntry.from_jva(cls.make_ptr(_next),
-                                  jvm_analysis)
+                                                            jvm_analysis)
 
         kargs['Symbol_value'] = None
         _literal = kargs['literal']
@@ -163,6 +166,7 @@ class SymbolTableEntry(BaseOverlay):
         if jvm_analysis:
             jvm_analysis.add_internal_object(addr, d)
         return d
+
 
 class SymbolTableBucket(BaseOverlay):
     _name = "SymbolTableBucket"
@@ -176,7 +180,7 @@ class SymbolTableBucket(BaseOverlay):
     types = get_field_types(SYMBOL_TABLE_BUCKET_TYPE)
 
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
     def update_fields(self, force_update=False):
@@ -185,22 +189,22 @@ class SymbolTableBucket(BaseOverlay):
     def parse_class_fields(self):
         setattr(self, 'updated', True)
 
-    def has_entry (self):
+    def has_entry(self):
         return not getattr(self, 'entry_is_null', True)
 
-    def get_entry_addr (self):
+    def get_entry_addr(self):
         literal = getattr(self, 'literal', -1)
         if self.has_entry():
             return literal
         return 0
 
-    def get_entry_value (self):
+    def get_entry_value(self):
         if self.has_entry():
             entry_value = getattr(self, 'entry_value', None)
             return entry_value.get_value()
         return None
 
-    def get_entry_values (self):
+    def get_entry_values(self):
         res = []
         if self.has_entry():
             entry_value = getattr(self, 'entry_value', None)
@@ -214,17 +218,17 @@ class SymbolTableBucket(BaseOverlay):
         entry_value = getattr(self, 'entry_value', None)
         entry = getattr(self, 'entry', -1)
         entry_str = "NONE" if self.has_entry() else str(entry_value)
-        return "%s 0x%08x %s"%(self._name, entry, entry_str)
+        return "%s 0x%08x %s" % (self._name, entry, entry_str)
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
-        if jvm_analysis and jvm_analysis.has_internal_object(addr):
-            return jvm_analysis.get_internal_object(addr)
+        if jvm_analysis and jvm_analysis.has_object(addr):
+            return jvm_analysis.get_object(addr)
 
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr": addr, 'analysis': jvm_analysis, 'updated': False}
         name_fields(data_unpack, nfields, fields=kargs)
 
         _entry = kargs["entry"]
@@ -239,6 +243,7 @@ class SymbolTableBucket(BaseOverlay):
             jvm_analysis.add_internal_object(addr, d)
         return d
 
+
 class SymbolTable(BaseOverlay):
     _name = "SymbolTable"
     _overlay = SYMBOL_TABLE_TYPE
@@ -251,12 +256,12 @@ class SymbolTable(BaseOverlay):
     types = get_field_types(SYMBOL_TABLE_TYPE)
 
     def __init__(self, **kargs):
-        for k,v in kargs.items():
+        for k, v in kargs.items():
             setattr(self, k, v)
 
-    def __str__ (self):
+    def __str__(self):
         addr = getattr(self, 'addr', None)
-        return ("SymbolTable@0x%08x"%addr)
+        return ("SymbolTable@0x%08x" % addr)
 
     def update_fields(self, force_update=False):
         setattr(self, 'updated', True)
@@ -274,19 +279,19 @@ class SymbolTable(BaseOverlay):
             if stb and stb.has_entry():
                 v = stb.get_entry_values()
                 if v:
-                     res += v
+                    res += v
         return res
 
     @classmethod
     def from_bytes(cls, addr, _bytes, jvm_analysis):
 
-        if jvm_analysis and jvm_analysis.has_internal_object(addr):
-            return jvm_analysis.get_internal_object(addr)
+        if jvm_analysis and jvm_analysis.has_object(addr):
+            return jvm_analysis.get_object(addr)
 
         nfields = cls.named32 if jvm_analysis.is_32bit else cls.named64
         fmt = cls.bits32 if jvm_analysis.is_32bit else cls.bits64
         data_unpack = struct.unpack(fmt, _bytes)
-        kargs = {"addr":addr,'analysis':jvm_analysis, 'updated':False}
+        kargs = {"addr": addr, 'analysis': jvm_analysis, 'updated': False}
         name_fields(data_unpack, nfields, fields=kargs)
 
         kargs['bucket_values'] = None
@@ -298,7 +303,7 @@ class SymbolTable(BaseOverlay):
             _table_size = kargs['table_size']
             _buckets = kargs['buckets']
             while pos < _table_size:
-                stb_addr = pos*incr+_buckets
+                stb_addr = pos * incr + _buckets
                 symbol_table_bucket = SymbolTableBucket.from_jva(stb_addr, jvm_analysis)
                 symbol_table_buckets.append(symbol_table_bucket)
                 pos += 1
@@ -313,7 +318,8 @@ class SymbolTable(BaseOverlay):
     def find_best_match(cls, sym_tables, jva):
         best_match = {}
         candidates = {}
-        symt_avgs = [(i, np.mean([len(str(j)) for j in i.get_bucket_values()])) for i in sym_tables if len(i.get_bucket_values()) > 0]
+        symt_avgs = [(i, np.mean([len(str(j)) for j in i.get_bucket_values()])) for i in sym_tables if
+                     len(i.get_bucket_values()) > 0]
         for symt, avg in symt_avgs:
             if symt is None or len(symt.get_bucket_values()) == 0:
                 continue
@@ -322,7 +328,6 @@ class SymbolTable(BaseOverlay):
             syms = [str(i) for i in bvalues]
             max_sym_len = np.max([len(i) for i in syms])
             if max_sym_len < 65537 and len(syms) > 1000:
-                print ("This looks like the best cand: %d values @ 0x%08x"%(len(symt.get_bucket_values()), symt.addr))
+                print("This looks like the best cand: %d values @ 0x%08x" % (len(symt.get_bucket_values()), symt.addr))
                 return symt
         return None
-

@@ -1,10 +1,10 @@
-
-from ..base import *
-from . luau_roblox_base import LuauRobloxBase
-from . luau_roblox_overlay import LUAR_CLOSURE_UPREFS, LUAR_CLOSURE_UVALS, LUAR_CLOSURE_RAW
-from . consts import LUAR_ROBLOX_BASE_FUNCS, LUAR_ROBLOX_TYPES, LUAR_ROBLOX_EVENT_NAMES
-
 import struct
+
+from .consts import LUAR_ROBLOX_BASE_FUNCS, LUAR_ROBLOX_TYPES, LUAR_ROBLOX_EVENT_NAMES
+from .luau_roblox_base import LuauRobloxBase
+from .luau_roblox_overlay import LUAR_CLOSURE_RAW
+from ..base import *
+
 
 class LuauRobloxClosure(LuauRobloxBase):
     _name = "Closure_Raw"
@@ -64,9 +64,9 @@ class LuauRobloxClosure(LuauRobloxBase):
     def python_value(self, bread_crumbs={}, **kargs):
         v = self.raw_value()
         if not self.addr in bread_crumbs:
-            bread_crumbs[self.addr] = {'ref_addrs':set(), 'is_array':True,
-                                       'is_prim':True, 'value':{},
-                                       'addr':self.addr}
+            bread_crumbs[self.addr] = {'ref_addrs': set(), 'is_array': True,
+                                       'is_prim': True, 'value': {},
+                                       'addr': self.addr}
         v = self.raw_value()
         bread_crumbs[self.addr]['value'] = v
         return v
@@ -77,14 +77,14 @@ class LuauRobloxClosure(LuauRobloxBase):
     def get_oop_field_value(self, field_name, klass_name=None):
         if field_name == 'value':
             return self.raw_value()
-        raise Exception("%s has no field '%s'"%(self._name, field_name))
+        raise Exception("%s has no field '%s'" % (self._name, field_name))
 
     @classmethod
     def from_bytes(cls, addr, nbytes, analysis=None, is_32bit=False):
         if not LuauRobloxBase.check_gc_header(nbytes):
             return None
-        kargs = { "addr":addr, "updated":False, 'analysis':analysis,
-                  "type":cls._name, 'is_32bit': is_32bit}
+        kargs = {"addr": addr, "updated": False, 'analysis': analysis,
+                 "type": cls._name, 'is_32bit': is_32bit}
         fmt = cls.bits32
         sz = cls.struct_size(is_32bit)
         data_unpack = struct.unpack(fmt, nbytes[:sz])
@@ -105,7 +105,7 @@ class LuauRobloxClosure(LuauRobloxBase):
         sz = cls.struct_size(is_32bit)
         if offset:
             fobj.seek(offset)
-        nbytes = fobj.read(sz+8096)
+        nbytes = fobj.read(sz + 8096)
         tstring = cls.from_bytes(addr, nbytes, analysis, is_32bit=is_32bit)
         setattr(tstring, 'raw_bytes', nbytes)
         return tstring
