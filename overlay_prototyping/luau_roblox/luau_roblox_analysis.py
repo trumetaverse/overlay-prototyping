@@ -1,13 +1,33 @@
+import ctypes
 import string
 from threading import Thread
 
 from .consts import *
-from .enumerate_luau_roblox import LuauSifterResults
+from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
 # from .luau_roblox_base import LuauRobloxBase
-from .luau_roblox_overlay import LuauRW_TString
+from .luau_roblox_overlay import LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Proto, LuauRW_Table, LuauRW_UpVal, LuauRW_Closure
 from ..analysis import Analysis, MemRange
 from ..base import BaseException
 
+GCO_TT_MAPPING = {
+    TSTRING: LuauRW_TString,
+    TUPVAL: LuauRW_UpVal,
+    TTHREAD: LuauRW_lua_State,
+    TCLOSURE: LuauRW_Closure,
+    TTABLE: LuauRW_Table,
+    TPROTO: LuauRW_Proto,
+    TUSERDATA: LuauRW_Udata
+}
+
+GCO_NAME_MAPPING = {
+    TSTRING: LuauRW_TString,
+    TUPVAL: LuauRW_UpVal,
+    TTHREAD: LuauRW_lua_State,
+    TCLOSURE: LuauRW_Closure,
+    TTABLE: LuauRW_Table,
+    TPROTO: LuauRW_Proto,
+    TUSERDATA: LuauRW_Udata
+}
 
 class LuauRobloxAnalysis(Analysis):
 
@@ -30,6 +50,14 @@ class LuauRobloxAnalysis(Analysis):
         if self.word_sz is None:
             self.word_sz = 4
 
+        self.lua_gco = {
+            k: {} for k in VALID_OBJ_TYPES
+        }
+
+
+
+        self.lua_structs = {}
+
     def add_object_reference(self, obj_vaddr, ref_address):
         obj = self.get_object(obj_vaddr)
         if obj is None:
@@ -43,14 +71,48 @@ class LuauRobloxAnalysis(Analysis):
         vaddr = obj.addr
         super(LuauRobloxAnalysis, self).add_object(vaddr, obj)
 
+        if obj.is_valid_gc_header():
+            tt = obj.get_gch().tt
+            self.lua_gco[tt][addr] = obj
+
+
         if obj.is_string() and len(str(obj.get_value())) > 0:
             self.strings[vaddr] = obj
 
-        if obj.is_prim():
-            self.prims[vaddr] = obj
+        # if obj.is_prim():
+        #     self.prims[vaddr] = obj
+
+    def get_lua_objs(self, tt=None):
+        tts = []
+        if tt is None:
+            tts = list(self.lua_gco.keys())
+        else:
+            tts = [tt]
+        r = {}
+        for tt in tts:
+            r.update({k:v for k,v in self.lua_gco[tt].items()})
+        return r
 
     def get_strings(self):
-        return {k: v for k, v in self.strings.items()}
+        return self.get_lua_objs(TSTRING)
+
+    def get_udatas(self):
+        return self.get_lua_objs(TUSERDATA)
+
+    def get_closures(self):
+        return self.get_lua_objs(TCLOSURE)
+
+    def get_tables(self):
+        return self.get_lua_objs(TTABLE)
+
+    def get_protos(self):
+        return self.get_lua_objs(TPROTO)
+
+    def get_upvals(self):
+        return self.get_lua_objs(TUPVAL)
+
+    def get_threads(self):
+        return self.get_lua_objs(TTHREAD)
 
     def check_results_status(self):
         if self.sift_results_loaded:
@@ -87,6 +149,53 @@ class LuauRobloxAnalysis(Analysis):
         # self.lrss.parse_file(self.raw_sift_results)
         # self.sift_results_loaded = True
 
+    def get_gco_overlay(self, vaddr, ctypes_cls, buf=None, ref_addr=None, add_obj=False, caution=False):
+        if not ctypes_cls.has_gc_header():
+            return None
+
+        obj_sz = ctypes.sizeof(ctypes_cls)
+        buf = self.read_vaddr(vaddr, obj_sz) if buf is None or len(buf) != obj_sz else buf
+        if len(buf) != obj_sz and not caution:
+            return None
+        elif len(buf) != obj_sz:
+            raise BaseException("Unable to read the buffer of right size for {}".format(str(ctypes_cls)))
+
+        gco = ctypes_cls.from_bytes(addr=vaddr, buf=buf, analysis=self)
+        vgch = gco.is_valid_gc_header()
+        if not vgch and caution:
+            raise BaseException("Object {} has invalid header: {}".format(str(ctypes_cls), gco))
+        elif not vgch:
+            return None
+
+        if add_obj:
+            self.add_object(vaddr, gco, ref_addr=ref_addr)
+        return gco
+
+    def get_overlay_obj_at(self, ctypes_cls, vaddr, ref_vaddr=None, add_obj=None, caution=False):
+        if ctypes_cls is None:
+            return None
+
+        if ctypes_cls.has_gc_header() and not self.is_valid_gc(vaddr, ctypes_cls):
+            if caution:
+                raise BaseException("Overlay is a GCObject, but header is invalid: @")
+
+
+        obj_sz = ctypes.sizeof(ctypes_cls)
+        buf = self.read_vaddr(vaddr, obj_sz)
+
+        if len(buf) != obj_sz and not caution:
+            return None
+        elif len(buf) != obj_sz:
+            raise BaseException("Unable to read the buffer for {}".format(str(ctypes_cls)))
+
+        obj = ctypes_cls.from_bytes(addr=vaddr, buf=buf, analysis=self)
+        if obj is None and not caution:
+            return None
+        else:
+            raise BaseException("Unable to read the buffer for {}".format(str(ctypes_cls)))
+
+    def get_tstring_at(self, vaddr, ref_addr=None):
+        pass
     def add_string_at_vaddr(self, vaddr, ref_vaddr=None):
         if vaddr in self.strings:
             return self.strings[vaddr]
@@ -133,6 +242,17 @@ class LuauRobloxAnalysis(Analysis):
 
     def potentials_upvals(self):
         return self.get_potential_objects_from_sifter(TUPVAL)
+
+    def find_potential_global_state(self):
+        pot_threads = self.get_objects_in_anchor_section(TTHREAD)
+        pt_gco = {}
+
+        pot_tobj = [self.get_gco_overlay(i.sink_vaddr, LuauRW_lua_State) for i in pot_threads]
+
+
+
+
+
 
     # @classmethod
     # def create_class(cls, name, overlay):
@@ -229,6 +349,10 @@ class LuauRobloxAnalysis(Analysis):
 
         # lua_strings
         self.find_anchor_strings()
+        self.find_anchor_pages()
+
+        # now that we have anchor pages
+        # find all gco threads
         return self.anchor_objects
 
     def check_string(self, obj):
@@ -249,7 +373,7 @@ class LuauRobloxAnalysis(Analysis):
                 results[addr] = obj
         return results
 
-    def get_objects_in_anchor_section(self, obj_tt):
+    def get_objects_in_anchor_section(self, obj_tt=None) -> [LuauSifterResult]:
         results = []
         if len(self.anchor_sections) == 0:
             self.find_anchor_pages()

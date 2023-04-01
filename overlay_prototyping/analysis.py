@@ -1,4 +1,5 @@
 import json
+import struct
 
 from .logger import init_logger
 
@@ -360,6 +361,27 @@ class Analysis(object):
         if vaddr is not None:
             return self.mem_ranges.get_memrange_from_vaddr(vaddr)
         return self.mem_ranges.get_memrange_from_paddr(paddr)
+
+    def read_uint(self, vaddr, word_sz=4, little_endian=True) -> [int|None]:
+        e = "<" if little_endian else ">"
+        r = "H" if word_sz == 2 else "I" if word_sz == 4 else "Q"
+        d = self.read_vaddr(vaddr, word_sz)
+        if len(d) != word_sz:
+            return None
+        v, _ = struct.unpack(e+r, d)
+        return v
+
+    def deref_address(self, vaddr, word_sz=4, little_endian=True) -> [int|None]:
+        vaddr_ptr = self.read_uint(vaddr, word_sz, little_endian)
+        if vaddr_ptr is None:
+            return None
+        return self.read_uint(vaddr_ptr, word_sz, little_endian)
+
+    def double_deref_address(self, vaddr, word_sz=4, little_endian=True) -> [int|None]:
+        vaddr_ptr = self.deref_address(vaddr, word_sz, little_endian)
+        if vaddr_ptr is None:
+            return None
+        return self.read_uint(vaddr_ptr, word_sz, little_endian)
 
     @classmethod
     def update_default_read_sz(cls, sz=DEFAULT_OBJECT_READ_SZ):

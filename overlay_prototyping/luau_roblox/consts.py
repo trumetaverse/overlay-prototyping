@@ -87,12 +87,20 @@ LUA_T_COUNT = TPROTO
 VALID_OBJ_TYPES = {
     TSTRING: "string",
     TTABLE: "table",
-    TFUNCTION: "function",
+    # TFUNCTION: "function",
     TCLOSURE: "closure",
     TUSERDATA: "userdata",
     TTHREAD: "thread",
     TPROTO: "proto",
     TUPVAL: "upval",
+    "string": TSTRING,
+    "table": TTABLE,
+    # "function": TFUNCTION,
+    "closure": TCLOSURE,
+    "userdata": TUSERDATA,
+    "thread": TTHREAD,
+    "proto": TPROTO,
+    "upval": TUPVAL,
 }
 
 LUAR_ROBLOX_TAG_TYPES = {

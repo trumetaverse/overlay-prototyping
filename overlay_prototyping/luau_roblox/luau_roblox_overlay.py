@@ -1,6 +1,6 @@
+import ctypes
 import struct
 from ctypes import *
-
 from .consts import *
 
 
@@ -21,23 +21,54 @@ class LuauRW_Union(Union):
         return dict((k, eval(v['type']), v['bits']) if 'bits' in v else (k, eval(v['type'])) for k, v in
                     json_fields.items())
 
+
+    def initialize_fields(self, offset, **kargs):
+        self._offset = offset
+        # print("Initializing {}".format(self.__class__.__name__))
+        for name, fld in self._fields_:
+            if self.init_required(fld):
+                # print("Initializing field: {} {}".format(name, fld.__name__))
+                _nobj = getattr(self, name)
+                _nobj.initialize_with_kargs(offset=offset, **kargs)
+                # print(_nobj.__dict__)
+                incr = sizeof(fld)
+                if sizeof(fld) % self.word_sz != 0:
+                    incr += (self.word_sz - sizeof(fld) % self.word_sz)
+                offset += incr
+            else:
+                offset += sizeof(fld)
+
+    def initialize_with_kargs(self, **kargs):
+        self._addr = 0
+        self.word_sz = 4
+        self.__value = None
+        self.__value_offset = None
+        self._is32b = False
+        self._offset = 0
+        # print("entering", type(self), self.__dict__)
+        # print("given kargs", kargs)
+        if 'addr' in kargs:
+            self._addr = kargs.get('addr')
+        if 'offset' in kargs:
+            self._offset = kargs.get('offset')
+        accepted_kargs = ['analysis', 'word_sz']
+
+        for k, v in kargs.items():
+            if k in accepted_kargs:
+                setattr(self, k, v)
+
+        if 'offset' in kargs:
+            del kargs['offset']
+        self.initialize_fields(self._offset, **kargs)
+        # print(self.__dict__)
+        # print(self._addr)
     def __init__(self, **kargs):
         super().__init__()
         self.initialize_with_kargs(**kargs)
-
         buf = kargs.get('buf', None)
         if isinstance(buf, bytes):
             fit = min(len(buf), sizeof(self))
             memmove(addressof(self), buf, fit)
-
-        offset = self._offset
-        self.initialize_fields(offset, kargs)
-
-    def initialize_fields(self, offset, kargs):
-        self._offset = offset
-        for name, fld in self._fields_:
-            if self.init_required(fld):
-                self.initialize_with_kargs(offset=offset, **kargs)
 
     @classmethod
     def init_required(cls, o):
@@ -50,28 +81,6 @@ class LuauRW_Union(Union):
     @property
     def offset(self):
         return getattr(self, '_offset')
-
-    def update_offsets(self, base_offset=0):
-        self._offset = base_offset
-        offset = self._offset
-        for name, field in self._fields_:
-            if hasattr(field, '_fields_'):
-                ft = field.__name__ if not isinstance(field, str) else field
-                fld = getattr(self, name)
-                # update word_sz
-                if getattr(fld, 'word_sz', 0) is None or getattr(fld, 'word_sz', 0) != self.word_sz:
-                    setattr(fld, 'word_sz', self.word_sz)
-                if hasattr(fld, 'update_offsets'):
-                    fld.update_offsets(base_offset=offset)
-                else:
-                    setattr(fld, '_offset', offset)
-                incr = sizeof(fld)
-                if sizeof(field) % self.word_sz != 0:
-                    incr += (self.word_sz - sizeof(field) % self.word_sz)
-                offset += incr
-            else:
-                offset += sizeof(field)
-        return offset
 
     @property
     def is_32bit(self):
@@ -119,9 +128,9 @@ class LuauRW_Union(Union):
 
     def get_offset(self, fld_name, cls=None):
         cls = type(self) if cls is None else cls
-        fld = getattr(cls, fld_name, None)
-        if fld is not None:
-            return getattr(fld, 'offset')
+        cls_fld = getattr(cls, fld_name, None)
+        if cls_fld is not None:
+            return getattr(cls_fld, 'offset')
         return None
 
     def get_dump(self, addr=None, offset=0, word_sz=None):
@@ -138,15 +147,15 @@ class LuauRW_Union(Union):
                 ft = field.__name__ if not isinstance(field, str) else field
                 _nobj = getattr(self, name)
                 _struct_dict, _flat = _nobj.get_dump(offset=offset, addr=addr, word_sz=word_sz)
-                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft}
+                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset}
                 r[addr + offset] = y
                 for i in _flat:
                     i['name'] = name + '.' + i['name']
-                flat.append({"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft})
+                flat.append({"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft, 'offset': offset})
                 flat = flat + _flat
             else:
                 ft = field.__name__ if not isinstance(field, str) else field
-                x = {"name": name, "value": getattr(self, name), "addr": addr + offset, 'type': ft}
+                x = {"name": name, "value": getattr(self, name), "addr": addr + offset, 'type': ft, 'offset': offset}
                 r[addr + offset] = x
                 flat.append(x)
 
@@ -183,12 +192,18 @@ class LuauRW_Union(Union):
         return f
 
     @classmethod
-    def from_file_obj(cls, fobj, addr, offset=None, analysis=None, word_sz=4):
+    def from_analysis(cls, addr, analysis, word_sz=4):
+        buf = analysis.read_vaddr(addr, sizeof(cls))
+        f = cls(addr=addr, buf=buf, analysis=analysis, word_sz=word_sz)
+        return f
+
+    @classmethod
+    def from_file_obj(cls, file_obj, addr, offset=None, analysis=None, word_sz=4):
         sz = sizeof(cls)
         if offset:
-            fobj.seek(offset)
-        nbytes = fobj.read(sz + 8096)
-        f = cls(addr=addr, buf=nbytes, analysis=analysis, word_sz=word_sz)
+            file_obj.seek(offset)
+        buf = file_obj.read(sz + 8096)
+        f = cls(addr=addr, buf=buf, analysis=analysis, word_sz=word_sz)
         return f
 
     @classmethod
@@ -200,11 +215,11 @@ class LuauRW_Union(Union):
     def get_str_fmt(cls, fld):
         typ = fld._type_ if hasattr(fld, '_type_') else None
         FMTS = {
-            'b': "{:02x}", 'B': "{:02x}", "?": "{:02x}",
-            'h': "{:04x}", 'H': "{:04x}",
-            'i': "{:08x}", 'I': "{:08x}", 'l': "{:08x}", 'L': "{:08x}",
-            'q': "{:08x}", 'Q': "{:08x}",
-            'e': "{:f}", 'f': "{:f}", 'd': "{:f}", 'L': "{:f}",
+            'b': "0x{:02x}", 'B': "0x{:02x}", "?": "0x{:02x}",
+            'h': "0x{:04x}", 'H': "0x{:04x}",
+            'i': "0x{:08x}", 'I': "0x{:08x}", 'l': "0x{:08x}", 'L': "0x{:08x}",
+            'q': "0x{:08x}", 'Q': "0x{:08x}",
+            'e': "{:f}", 'f': "{:f}", 'd': "{:f}",
         }
         return FMTS.get(typ, "{}")
 
@@ -215,6 +230,19 @@ class LuauRW_Base(LittleEndianStructure):
     _fields_dict_ = {}
     _is_union_ = False
     _field_fixups_ = {}
+    _gco_ = False
+    _tt_ = None
+
+    @classmethod
+    def get_field_cls(cls, name):
+        if name in cls._field_fixups_:
+            alias = cls._field_fixups_[name]
+            clean = alias.replace('*', '')
+            fld_cls = FIXUP_TYPE_MAPPING.get(clean, None)
+            if fld_cls is not None:
+                return alias, fld_cls
+        return None, cls._fields_dict_[name]
+
 
     @classmethod
     def create_fields(cls, json_fields):
@@ -324,16 +352,16 @@ class LuauRW_Base(LittleEndianStructure):
                 ft = field.__name__ if not isinstance(field, str) else field
                 _nobj = getattr(self, name)
                 _struct_dict, _flat = _nobj.get_dump(offset=offset, addr=addr, word_sz=word_sz)
-                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft}
+                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset}
                 r[addr + offset] = y
                 for i in _flat:
                     i['name'] = name + '.' + i['name']
-                flat.append({"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft})
+                flat.append({"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft, 'offset': offset})
                 flat = flat + _flat
-                flat.append({"name": name, "value": "STRUCT_END", "addr": addr + offset, 'type': ft})
+                flat.append({"name": name, "value": "STRUCT_END", "addr": addr + offset, 'type': ft, 'offset': offset})
             else:
                 ft = field.__name__ if not isinstance(field, str) else field
-                x = {"name": name, "value": getattr(self, name), "addr": addr + offset, 'type': ft}
+                x = {"name": name, "value": getattr(self, name), "addr": addr + offset, 'type': ft, 'offset': offset}
                 r[addr + offset] = x
                 flat.append(x)
         return r, flat
@@ -409,11 +437,32 @@ class LuauRW_Base(LittleEndianStructure):
         setattr(self, '_cached_gch', fld)
         return fld
 
+    @property
+    def gco(self):
+        return self._gco_
+
+    @property
+    def expected_tt(self):
+        return self._tt_
+    @classmethod
+    def has_gc_header(cls):
+        return cls.gco
+
     def is_valid_gc_header(self):
+        if not self.has_gc_header():
+            return False
+
         fld = self.get_gch()
         if fld is None:
             return False
-        return fld.tt in TYPES and fld.marked in VALID_MARKS and fld.gch_padding == 0
+        valid_gch = fld.tt in TYPES and fld.marked in VALID_MARKS and fld.gch_padding == 0
+        ett = self.expected_tt
+        # constraining the validity to the object type (if known) and gch headers
+        if valid_gch and ett is None:
+            return True
+        elif valid_gch and ett == fld.tt:
+            return True
+        return False
 
     @classmethod
     def from_int(cls, addr, value, analysis=None, word_sz=4):
@@ -474,6 +523,7 @@ class LuauRW_Base(LittleEndianStructure):
 
 
 class LuauRW_GCHeader(LuauRW_Base):
+    _gco_ = True
     __field_def__ = {
         "tt": {"type": "c_uint8"},
         "marked": {"type": "c_uint8"},
@@ -489,6 +539,8 @@ class LuauRW_GCHeader(LuauRW_Base):
 
 
 class LuauRW_TString(LuauRW_Base):
+    _gco_ = True
+    _tt_ = TSTRING
     __field_def__ = {
         "tt": {"type": "c_uint8"},
         "marked": {"type": "c_uint8"},
@@ -576,8 +628,16 @@ class LuauRW_TValue(LuauRW_Base):
     _fields_ = LuauRW_Base.create_fields(__field_def__)
     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
 
-
+class LuauRW_UnionArrayBoundary(LuauRW_Union):
+    __field_def__ = {
+        "lastfree": {"type": "c_uint32"},
+        "aboundary": {"type": "c_uint32"},
+    }
+    _fields_ = LuauRW_Base.create_fields(__field_def__)
+    _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
 class LuauRW_Table(LuauRW_Base):
+    _gco_ = True
+    _tt_ = TTABLE
     __field_def__ = {
         "tt": {"type": "c_uint8"},
         "marked": {"type": "c_uint8"},
@@ -590,9 +650,13 @@ class LuauRW_Table(LuauRW_Base):
         "lsizenode": {"type": "c_uint8"},
         "nodemask8": {"type": "c_uint8"},
         "sizearray": {"type": "c_uint32"},
-
-        "lastfree_aboundary": {"type": "c_uint32"},
+        # "lastfree_aboundary": {"type": "c_uint32"},
+        #  Original
+        # "__anonymous__": {"type": "LuauRW_UnionArrayBoundary"},
+        # "metatable": {"type": "c_uint32"},  # Table*
+        #  Swapped after some analysis
         "metatable": {"type": "c_uint32"},  # Table*
+        "__anonymous__": {"type": "LuauRW_UnionArrayBoundary"},
         "array": {"type": "c_uint32"},
         "node": {"type": "c_uint32"},
         "gclist": {"type": "c_uint32"},
@@ -619,72 +683,12 @@ class LuauRW_LocVar(LuauRW_Base):
     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
 
 
-class LuauRW_UnionArrayBoundary(LuauRW_Union):
-    __field_def__ = {
-        "lastfree": {"type": "c_uint32"},
-        "aboundary": {"type": "c_uint32"},
-    }
-    _fields_ = LuauRW_Base.create_fields(__field_def__)
-    _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
 
-
-# class LuauRW_Value(LuauRW_Base):
-#     __field_def__ = {
-#         "gc": {"type": "LuauRW_GCHeader"},
-#         "tmcache": {"type": "c_uint8"},
-#         "readonly": {"type": "c_uint8"},
-#         "safeenv": {"type": "c_uint8"},
-#         "lsizenode": {"type": "c_uint8"},
-#         "nodemask8": {"type": "c_uint8"},
-#         "sizearray": {"type": "c_uint32"},
-#         "lastfree_aboundary": {"type": "LuauRW_UnionArrayBoundary"},
-#         "metatable": {"type": "c_uint32"},
-#         "array": {"type": "c_uint32"},
-#         "node": {"type": "c_uint32"},
-#         "gclist": {"type": "c_uint32"},
-#     }
-#     _fields_ = LuauRW_Base.create_fields(__field_def__)
-#     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
-
-# class LuauRW_Value(LuauRW_Base):
-#     __field_def__ = {
-#         "gc": {"type": "LuauRW_GCHeader"},
-#         "tmcache": {"type": "c_uint8"},
-#         "readonly": {"type": "c_uint8"},
-#         "safeenv": {"type": "c_uint8"},
-#         "lsizenode": {"type": "c_uint8"},
-#         "nodemask8": {"type": "c_uint8"},
-#         "sizearray": {"type": "c_uint32"},
-#         "lastfree_aboundary": {"type": "LuauRW_UnionArrayBoundary"},
-#         "metatable": {"type": "c_uint32"},
-#         "array": {"type": "c_uint32"},
-#         "node": {"type": "c_uint32"},
-#         "gclist": {"type": "c_uint32"},
-#     }
-#     _fields_ = LuauRW_Base.create_fields(__field_def__)
-#     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
-
-
-# class LuauRW_TTable(LuauRW_Base):
-#     __field_def__ = {
-#         "gc": {"type": "LuauRW_GCHeader"},
-#         "tmcache": {"type": "c_uint8"},
-#         "readonly": {"type": "c_uint8"},
-#         "safeenv": {"type": "c_uint8"},
-#         "lsizenode": {"type": "c_uint8"},
-#         "nodemask8": {"type": "c_uint8"},
-#         "sizearray": {"type": "c_uint32"},
-#         "lastfree_aboundary": {"type": "c_uint32"},
-#         "metatable": {"type": "c_uint32"},
-#         "array": {"type": "c_uint32"},
-#         "node": {"type": "c_uint32"},
-#         "gclist": {"type": "c_uint32"},
-#     }
-#     _fields_ = LuauRW_Base.create_fields(__field_def__)
-#     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
 
 
 class LuauRW_Udata(LuauRW_Base):
+    _gco_ = True
+    _tt_ = TUSERDATA
     __field_def__ = {
         "tt": {"type": "c_uint8"},
         "marked": {"type": "c_uint8"},
@@ -727,6 +731,8 @@ class LuauRW_UpValUnion(LuauRW_Union):
 
 
 class LuauRW_UpVal(LuauRW_Base):
+    _gco_ = True
+    _tt_ = TUPVAL
     __field_def__ = {
         "tt": {"type": "c_uint8"},
         "marked": {"type": "c_uint8"},
@@ -748,6 +754,8 @@ class LuauRW_UpVal(LuauRW_Base):
 
 
 class LuauRW_Proto(LuauRW_Base):
+    _gco_ = True
+    _tt_ = TCLOSURE
     __field_def__ = {
         "tt": {"type": "c_uint8"},
         "marked": {"type": "c_uint8"},
@@ -1051,6 +1059,8 @@ class LuauRW_stringtable(LuauRW_Base):
 
 
 class LuauRW_lua_State(LuauRW_Base):
+    _gco_ = True
+    _tt_ = TTHREAD
     __field_def__ = {
         "tt": {"type": "c_uint8"},
         "marked": {"type": "c_uint8"},
@@ -1058,6 +1068,7 @@ class LuauRW_lua_State(LuauRW_Base):
         "gch_padding": {"type": "c_uint8"},
 
         "status": {"type": "c_uint8"},
+        "activememcat": {"type": "c_uint8"},
         "isactive": {"type": "c_uint8"},
         "singlestep": {"type": "c_uint8"},
 
@@ -1254,3 +1265,18 @@ class LuauRW_LG(LuauRW_Base):
     }
     _fields_ = LuauRW_Base.create_fields(__field_def__)
     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
+
+
+FIXUP_TYPE_MAPPING = {
+    "TString": LuauRW_TString,
+    "GCObject": LuauRW_GCObjectUnion,
+    "global_State": LuauRW_global_State,
+    "lua_State": LuauRW_lua_State,
+    "TValue": LuauRW_TValue,
+    "Value": LuauRW_Value,
+    "UpVal": LuauRW_UpVal,
+    "CallInfo": LuauRW_CallInfo,
+    "Instruction": ctypes.c_uint32,
+    "lua_Page": LuauRW_lua_Page,
+    "LuaNode": LuauRW_LuaNode,
+}
