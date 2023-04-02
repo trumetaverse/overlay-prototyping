@@ -5,7 +5,7 @@ from threading import Thread
 from .consts import *
 from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
 # from .luau_roblox_base import LuauRobloxBase
-from .luau_roblox_overlay import LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Proto, LuauRW_Table, LuauRW_UpVal, LuauRW_Closure
+from .luau_roblox_overlay import LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Proto, LuauRW_Table, LuauRW_UpVal, LuauRW_Closure, VALID_OBJ_CLS_MAPPING
 from ..analysis import Analysis, MemRange
 from ..base import BaseException
 
@@ -214,12 +214,18 @@ class LuauRobloxAnalysis(Analysis):
 
         return self.get_strings_from_sifter_results()
 
-    def get_potential_objects_from_sifter(self, tt):
+    def get_potential_objects_from_sifter(self, tt, perform_overlay=True, add_obj=False):
         results = []
         for o in self.lrss.get_potential_objects():
             # this is a sifter result and not an object
             if o.is_valid_gc_header() and o.tt == tt:
-                results.append(o)
+                if perform_overlay:
+                    cls_type = VALID_OBJ_CLS_MAPPING.get(tt)
+                    obj = self.get_gco_overlay(o.sink_vaddr, cls_type, add_obj=add_obj)
+                    if obj is not None:
+                        results.append(obj)
+                else:
+                    results.append(o)
         return results
 
     def potentials_tstrings(self):
@@ -246,8 +252,8 @@ class LuauRobloxAnalysis(Analysis):
     def find_potential_global_state(self):
         pot_threads = self.get_objects_in_anchor_section(TTHREAD)
         pt_gco = {}
-
-        pot_tobj = [self.get_gco_overlay(i.sink_vaddr, LuauRW_lua_State) for i in pot_threads]
+        global_states = [getattr(i, 'global') for i in pot_threads if i is not None]
+        global_tables = []
 
 
 
@@ -380,7 +386,7 @@ class LuauRobloxAnalysis(Analysis):
 
         pot_objects = self.get_potential_objects_from_sifter(obj_tt)
         mrs = [i['memory_range'] for i in self.anchor_sections.values()]
-        results = [i for i in pot_objects if any([mr.vaddr <= i.sink_vaddr < mr.vaddr + mr.vsize for mr in mrs])]
+        results = [i for i in pot_objects if any([mr.vaddr <= i.addr < mr.vaddr + mr.vsize for mr in mrs])]
         return results
 
     def enumerate_objects_in_anchor_sections(self):

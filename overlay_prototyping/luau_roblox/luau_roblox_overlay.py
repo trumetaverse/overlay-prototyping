@@ -1,7 +1,9 @@
 import ctypes
 import struct
 from ctypes import *
+
 from .consts import *
+from ..base import BaseException
 
 
 class LuauRW_Union(Union):
@@ -21,22 +23,13 @@ class LuauRW_Union(Union):
         return dict((k, eval(v['type']), v['bits']) if 'bits' in v else (k, eval(v['type'])) for k, v in
                     json_fields.items())
 
-
     def initialize_fields(self, offset, **kargs):
         self._offset = offset
-        # print("Initializing {}".format(self.__class__.__name__))
         for name, fld in self._fields_:
             if self.init_required(fld):
-                # print("Initializing field: {} {}".format(name, fld.__name__))
+                offset = self.get_offset(name)
                 _nobj = getattr(self, name)
                 _nobj.initialize_with_kargs(offset=offset, **kargs)
-                # print(_nobj.__dict__)
-                incr = sizeof(fld)
-                if sizeof(fld) % self.word_sz != 0:
-                    incr += (self.word_sz - sizeof(fld) % self.word_sz)
-                offset += incr
-            else:
-                offset += sizeof(fld)
 
     def initialize_with_kargs(self, **kargs):
         self._addr = 0
@@ -45,8 +38,6 @@ class LuauRW_Union(Union):
         self.__value_offset = None
         self._is32b = False
         self._offset = 0
-        # print("entering", type(self), self.__dict__)
-        # print("given kargs", kargs)
         if 'addr' in kargs:
             self._addr = kargs.get('addr')
         if 'offset' in kargs:
@@ -59,16 +50,20 @@ class LuauRW_Union(Union):
 
         if 'offset' in kargs:
             del kargs['offset']
+        if 'buf' in kargs:
+            _nkargs = kargs.copy()
+            kargs = _nkargs
+            del kargs['buf']
         self.initialize_fields(self._offset, **kargs)
-        # print(self.__dict__)
-        # print(self._addr)
+
     def __init__(self, **kargs):
         super().__init__()
-        self.initialize_with_kargs(**kargs)
         buf = kargs.get('buf', None)
         if isinstance(buf, bytes):
             fit = min(len(buf), sizeof(self))
             memmove(addressof(self), buf, fit)
+        self.initialize_with_kargs(**kargs)
+
 
     @classmethod
     def init_required(cls, o):
@@ -91,40 +86,27 @@ class LuauRW_Union(Union):
         return self.word_sz == 8
 
     def __new__(cls, addr, buf=None, word_sz=4, analysis=None):
-        if buf:
+        sz = sizeof(cls)
+        if buf is None and analysis is not None:
+            buf = analysis.read_vaddr(addr, sz)
+        if buf and sz <= len(buf):
             return cls.from_buffer_copy(buf)
+        elif buf is not None:
+            return None
         return LittleEndianStructure.__new__(cls)
 
-    def _fields_to_dict(self, obj, addr=None, offset=0, word_sz=4):
-        cls = type(obj)
-        r = {}
-        flat = []
-        unions = []
-        addr = 0 if addr is None and not hasattr(self, 'addr') else self.addr
-        flat.append({"name": '', "value": "UNION_VALUE_START", "addr": addr + offset, 'type': ""})
-        for name, field in obj._fields_:
-            offset = self.get_offset(name, cls)
-            if hasattr(field, '_fields_'):
-                _nobj = getattr(self, name)
-                _struct_dict, _flat = _nobj.get_dump(offset=offset, addr=addr, word_sz=word_sz)
-                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft}
-                unions.append(y)
-                for i in _flat:
-                    i['name'] = name + '.' + i['name']
+    def get_alias(self, name):
+        if name in self._field_fixups_:
+            return self._field_fixups_[name]
+        return None
 
-                flat.append({"name": name, "value": "UNION_STRUCT_VALUE_START", "addr": addr, 'type': ft})
-                flat = flat + _flat
-                flat.append({"name": name, "value": "UNION_STRUCT_VALUE_END", "addr": addr, 'type': ft})
-
-            else:
-                ft = field.__name__ if not isinstance(field, str) else field
-                x = {"name": name, "value": getattr(obj, name), "addr": addr, 'type': ft}
-                unions.append(x)
-                flat.append(x)
-
-        r[addr] = unions
-        flat.append({"name": '', "value": "UNION_VALUE_END", "addr": addr + offset})
-        return r, flat
+    def get_typestr_for_dump(self, name):
+        field = self._fields_dict_.get(name, None)
+        alias = self.get_alias(name)
+        ft = field.__name__ if not isinstance(field, str) else field
+        if alias is None:
+            return str(ft)
+        return "{} as {}".format(alias, ft)
 
     def get_offset(self, fld_name, cls=None):
         cls = type(self) if cls is None else cls
@@ -133,8 +115,17 @@ class LuauRW_Union(Union):
             return getattr(cls_fld, 'offset')
         return None
 
+    @classmethod
+    def is_field_array(cls, name):
+        _ncls = cls._fields_dict_[name]
+        if hasattr(_ncls, '__class__') and str(_ncls.__class__).find('ArrayType') > 0:
+            return True
+        elif hasattr(_ncls, '__name__') and str(_ncls.__name__).find('_Array_') > 0:
+            return True
+        return False
+
     def get_dump(self, addr=None, offset=0, word_sz=None):
-        word_sz = word_sz if word_sz is not None else self.word_sz if self.word_sz is not None else 4
+        word_sz = word_sz if word_sz is not None else getattr(self, 'word_sz', 4)
         r = {}
         flat = []
         cls = type(self)
@@ -143,19 +134,33 @@ class LuauRW_Union(Union):
             addr = 0 if not hasattr(self, 'addr') else self.addr
         for name, field in self._fields_:
             offset = self.get_offset(name, cls)
-            if hasattr(field, '_fields_'):
-                ft = field.__name__ if not isinstance(field, str) else field
+            ft = self.get_typestr_for_dump(name)
+            fmt = self.get_str_fmt(name)
+            is_array = self.is_field_array(name)
+            if hasattr(field, '_fields_') and getattr(self, 'is_union', False):
                 _nobj = getattr(self, name)
                 _struct_dict, _flat = _nobj.get_dump(offset=offset, addr=addr, word_sz=word_sz)
-                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset}
+                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array": is_array}
                 r[addr + offset] = y
                 for i in _flat:
                     i['name'] = name + '.' + i['name']
-                flat.append({"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft, 'offset': offset})
+                flat.append(
+                    {"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array": is_array})
                 flat = flat + _flat
+                flat.append({"name": name, "value": "STRUCT_END", "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array": is_array})
+            elif hasattr(field, '_fields_'):
+                _nobj = getattr(self, name)
+                _struct_dict, _flat = _nobj.get_dump(offset=offset, addr=addr, word_sz=word_sz)
+                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array": is_array}
+                r[addr + offset] = y
+                for i in _flat:
+                    i['name'] = name + '.' + i['name']
+                flat.append(
+                    {"name": name, "value": "UNION_START", "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array": is_array})
+                flat = flat + _flat
+                flat.append({"name": name, "value": "UNION_END", "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array": is_array})
             else:
-                ft = field.__name__ if not isinstance(field, str) else field
-                x = {"name": name, "value": getattr(self, name), "addr": addr + offset, 'type': ft, 'offset': offset}
+                x = {"name": name, "value": getattr(self, name), "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array": is_array}
                 r[addr + offset] = x
                 flat.append(x)
 
@@ -164,8 +169,11 @@ class LuauRW_Union(Union):
     def __str__(self):
         lines = []
         for line in self.get_dump()[1]:
-            fld = self._fields_dict_.get(line['name'])
-            line['value_str'] = self.get_str_fmt(fld).format(line['value'])
+            fmt = line['fmt']
+            if line['is_array']:
+                line['value_str'] = "[{}]".format(', '.join([fmt.format(i) for i in line['value']]))
+            else:
+                line['value_str'] = fmt.format(line['value'])
             l = "{addr:08x} {type} {name} {value_str}".format(**line)
             # if isinstance(line['value'], int):
             #     l = "{addr:08x} {name} {type} {value:08x}".format(**line)
@@ -192,10 +200,11 @@ class LuauRW_Union(Union):
         return f
 
     @classmethod
-    def from_analysis(cls, addr, analysis, word_sz=4):
+    def from_analysis(cls, addr, analysis, word_size=4, safe_load=True):
         buf = analysis.read_vaddr(addr, sizeof(cls))
-        f = cls(addr=addr, buf=buf, analysis=analysis, word_sz=word_sz)
-        return f
+        if buf is None or len(buf) != sizeof(cls) and safe_load:
+            raise BaseException("Failed to read bytes for {}".format(str(type(cls))))
+        return cls.from_bytes(addr, buf, analysis=analysis, word_sz=word_size)
 
     @classmethod
     def from_file_obj(cls, file_obj, addr, offset=None, analysis=None, word_sz=4):
@@ -212,16 +221,15 @@ class LuauRW_Union(Union):
         return cls.from_bytes(addr, nbytes, analysis=analysis, word_sz=word_sz)
 
     @classmethod
-    def get_str_fmt(cls, fld):
-        typ = fld._type_ if hasattr(fld, '_type_') else None
-        FMTS = {
-            'b': "0x{:02x}", 'B': "0x{:02x}", "?": "0x{:02x}",
-            'h': "0x{:04x}", 'H': "0x{:04x}",
-            'i': "0x{:08x}", 'I': "0x{:08x}", 'l': "0x{:08x}", 'L': "0x{:08x}",
-            'q': "0x{:08x}", 'Q': "0x{:08x}",
-            'e': "{:f}", 'f': "{:f}", 'd': "{:f}",
-        }
-        return FMTS.get(typ, "{}")
+    def get_str_fmt(cls, name):
+        fld = cls._fields_dict_[name] if name in cls._fields_dict_ else None
+        typ = None
+        if cls.is_field_array(name):
+            typ = fld._type_._type_ if hasattr(fld, '_type_') and hasattr(fld._type_, "_type_") else None
+        else:
+            typ = fld._type_ if hasattr(fld, '_type_') else None
+        fmt = CTYPE_VALUE_FMTS.get(typ, "{}")
+        return fmt
 
 
 class LuauRW_Base(LittleEndianStructure):
@@ -243,7 +251,6 @@ class LuauRW_Base(LittleEndianStructure):
                 return alias, fld_cls
         return None, cls._fields_dict_[name]
 
-
     @classmethod
     def create_fields(cls, json_fields):
         return [(k, eval(v['type']), v['bits']) if 'bits' in v else (k, eval(v['type'])) for k, v in
@@ -256,27 +263,23 @@ class LuauRW_Base(LittleEndianStructure):
 
     def __init__(self, **kargs):
         super().__init__()
-        self.initialize_with_kargs(**kargs)
         buf = kargs.get('buf', None)
         if isinstance(buf, bytes):
             fit = min(len(buf), sizeof(self))
             memmove(addressof(self), buf, fit)
+        self.initialize_with_kargs(**kargs)
+
 
     def initialize_fields(self, offset, **kargs):
         self._offset = offset
-        # print("Initializing {}".format(self.__class__.__name__))
+        if 'word_sz' not in kargs:
+            kargs['word_sz'] = 4
+
         for name, fld in self._fields_:
             if self.init_required(fld):
-                # print("Initializing field: {} {}".format(name, fld.__name__))
+                offset = self.get_offset(name)
                 _nobj = getattr(self, name)
                 _nobj.initialize_with_kargs(offset=offset, **kargs)
-                # print(_nobj.__dict__)
-                incr = sizeof(fld)
-                if sizeof(fld) % self.word_sz != 0:
-                    incr += (self.word_sz - sizeof(fld) % self.word_sz)
-                offset += incr
-            else:
-                offset += sizeof(fld)
 
     def initialize_with_kargs(self, **kargs):
         self._addr = 0
@@ -285,8 +288,6 @@ class LuauRW_Base(LittleEndianStructure):
         self.__value_offset = None
         self._is32b = False
         self._offset = 0
-        # print("entering", type(self), self.__dict__)
-        # print("given kargs", kargs)
         if 'addr' in kargs:
             self._addr = kargs.get('addr')
         if 'offset' in kargs:
@@ -299,9 +300,12 @@ class LuauRW_Base(LittleEndianStructure):
 
         if 'offset' in kargs:
             del kargs['offset']
+        if 'buf' in kargs:
+            _nkargs = kargs.copy()
+            kargs = _nkargs
+            del kargs['buf']
         self.initialize_fields(self._offset, **kargs)
-        # print(self.__dict__)
-        # print(self._addr)
+
 
     @classmethod
     def init_required(cls, o):
@@ -325,11 +329,14 @@ class LuauRW_Base(LittleEndianStructure):
 
     def __new__(cls, addr, buf=None, word_sz=4, analysis=None):
         sz = sizeof(cls)
+        if buf is None and analysis is not None:
+            buf = analysis.read_vaddr(addr, sizeof(cls))
         if buf and sz <= len(buf):
             return cls.from_buffer_copy(buf)
         elif buf is not None:
             return None
         return LittleEndianStructure.__new__(cls)
+
 
     def get_offset(self, fld_name, cls=None):
         cls = type(self) if cls is None else cls
@@ -337,6 +344,28 @@ class LuauRW_Base(LittleEndianStructure):
         if fld is not None:
             return getattr(fld, 'offset')
         return None
+
+    def get_alias(self, name):
+        if name in self._field_fixups_:
+            return self._field_fixups_[name]
+        return None
+
+    def get_typestr_for_dump(self, name):
+        field = self._fields_dict_.get(name, None)
+        alias = self.get_alias(name)
+        ft = field.__name__ if not isinstance(field, str) else field
+        if alias is None:
+            return str(ft)
+        return "{} as {}".format(alias, ft)
+
+    @classmethod
+    def is_field_array(cls, name):
+        _ncls = cls._fields_dict_[name]
+        if hasattr(_ncls, '__class__') and str(_ncls.__class__).find('ArrayType') > 0:
+            return True
+        elif hasattr(_ncls, '__name__') and str(_ncls.__name__).find('_Array_') > 0:
+            return True
+        return False
 
     def get_dump(self, addr=None, offset=0, word_sz=None):
         if word_sz is None:
@@ -346,22 +375,37 @@ class LuauRW_Base(LittleEndianStructure):
         flat = []
         if addr is None:
             addr = 0 if not hasattr(self, 'addr') else self.addr
+
         for name, field in self._fields_:
+            is_array = self.is_field_array(name)
             offset = self.get_offset(name, cls)
-            if hasattr(field, '_fields_'):
-                ft = field.__name__ if not isinstance(field, str) else field
+            ft = self.get_typestr_for_dump(name)
+            fmt = self.get_str_fmt(name)
+            if hasattr(field, '_fields_') and getattr(self, 'is_union', False):
                 _nobj = getattr(self, name)
                 _struct_dict, _flat = _nobj.get_dump(offset=offset, addr=addr, word_sz=word_sz)
-                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset}
+                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array":is_array}
                 r[addr + offset] = y
                 for i in _flat:
                     i['name'] = name + '.' + i['name']
-                flat.append({"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft, 'offset': offset})
+                flat.append(
+                    {"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array":is_array})
                 flat = flat + _flat
-                flat.append({"name": name, "value": "STRUCT_END", "addr": addr + offset, 'type': ft, 'offset': offset})
+                flat.append({"name": name, "value": "STRUCT_END", "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array":is_array})
+            elif hasattr(field, '_fields_'):
+                _nobj = getattr(self, name)
+                _struct_dict, _flat = _nobj.get_dump(offset=offset, addr=addr, word_sz=word_sz)
+                y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array":is_array}
+                r[addr + offset] = y
+                for i in _flat:
+                    i['name'] = name + '.' + i['name']
+                flat.append(
+                    {"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array":is_array})
+                flat = flat + _flat
+                flat.append({"name": name, "value": "STRUCT_END", "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array":is_array})
             else:
-                ft = field.__name__ if not isinstance(field, str) else field
-                x = {"name": name, "value": getattr(self, name), "addr": addr + offset, 'type': ft, 'offset': offset}
+                # ft = field.__name__ if not isinstance(field, str) else field
+                x = {"name": name, "value": getattr(self, name), "addr": addr + offset, 'type': ft, 'offset': offset, "fmt":fmt, "is_array":is_array}
                 r[addr + offset] = x
                 flat.append(x)
         return r, flat
@@ -369,18 +413,24 @@ class LuauRW_Base(LittleEndianStructure):
     def __str__(self):
         lines = []
         for line in self.get_dump()[1]:
-            fld = self._fields_dict_.get(line['name'])
-            line['value_str'] = self.get_str_fmt(fld).format(line['value'])
+            fmt = line['fmt']
+            if line['is_array']:
+                line['value_str'] = "[{}]".format(', '.join([fmt.format(i) for i in line['value']]))
+            else:
+                line['value_str'] = fmt.format(line['value'])
             l = "{addr:08x} {type} {name} {value_str}".format(**line)
-            # if isinstance(line['value'], int):
-            #     l = "{addr:08x} {name} {type} {value:08x}".format(**line)
             lines.append(l)
         return "\n".join(lines)
 
     @classmethod
-    def get_str_fmt(cls, fld):
-        typ = fld._type_ if hasattr(fld, '_type_') else None
-        return CTYPE_VALUE_FMTS.get(typ, "{}")
+    def get_str_fmt(cls, name):
+        fld = cls._fields_dict_[name] if name in cls._fields_dict_ else None
+        if cls.is_field_array(name):
+            typ = fld._type_._type_ if hasattr(fld, '_type_') and hasattr(fld._type_, "_type_") else None
+        else:
+            typ = fld._type_ if hasattr(fld, '_type_') else None
+        fmt = CTYPE_VALUE_FMTS.get(typ, "{}")
+        return fmt
 
     def __repr__(self):
         return str(self)
@@ -417,6 +467,13 @@ class LuauRW_Base(LittleEndianStructure):
         return f
 
     @classmethod
+    def from_analysis(cls, addr, analysis, word_size=4, safe_load=True):
+        buf = analysis.read_vaddr(addr, sizeof(cls))
+        if buf is None or len(buf) != sizeof(cls) and safe_load:
+            raise BaseException("Failed to read bytes for {}".format(str(type(cls))))
+        return cls.from_bytes(addr, buf, analysis=analysis, word_sz=word_size)
+
+    @classmethod
     def check_gc_header(cls, buf):
         v = LuauRW_GCHeader.deserialize(0, buf)
         return v.is_valid_gc_header()
@@ -444,6 +501,7 @@ class LuauRW_Base(LittleEndianStructure):
     @property
     def expected_tt(self):
         return self._tt_
+
     @classmethod
     def has_gc_header(cls):
         return cls.gco
@@ -534,7 +592,6 @@ class LuauRW_GCHeader(LuauRW_Base):
     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
 
     def __init__(self, **kargs):
-        # print('creating the headers')
         super(LuauRW_GCHeader, self).__init__(**kargs)
 
 
@@ -628,6 +685,7 @@ class LuauRW_TValue(LuauRW_Base):
     _fields_ = LuauRW_Base.create_fields(__field_def__)
     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
 
+
 class LuauRW_UnionArrayBoundary(LuauRW_Union):
     __field_def__ = {
         "lastfree": {"type": "c_uint32"},
@@ -635,6 +693,8 @@ class LuauRW_UnionArrayBoundary(LuauRW_Union):
     }
     _fields_ = LuauRW_Base.create_fields(__field_def__)
     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
+
+
 class LuauRW_Table(LuauRW_Base):
     _gco_ = True
     _tt_ = TTABLE
@@ -681,9 +741,6 @@ class LuauRW_LocVar(LuauRW_Base):
     _field_fixups_ = {"varname": "TString*"}
     _fields_ = LuauRW_Base.create_fields(__field_def__)
     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
-
-
-
 
 
 class LuauRW_Udata(LuauRW_Base):
@@ -1005,10 +1062,10 @@ class LuauRW_lua_ExecutionCallbacks(LuauRW_Base):
     _fields_dict_ = LuauRW_Base.create_fields_dict(__field_def__)
     _field_fixups_ = {
         "context": "c_void_p",
-        "close": {"type": "void (*close)(lua_State* L)"},
-        "destroy": {"type": "void (*destroy)(lua_State* L, Proto* proto)"},
-        "enter": {"type": "int (*enter)(lua_State* L, Proto* proto);"},
-        "setbreakpoint": {"type": "void (*setbreakpoint)(lua_State* L, Proto* proto, int line)"},
+        "close": "void (*close)(lua_State* L)",
+        "destroy": "void (*destroy)(lua_State* L, Proto* proto)",
+        "enter": "int (*enter)(lua_State* L, Proto* proto);",
+        "setbreakpoint": "void (*setbreakpoint)(lua_State* L, Proto* proto, int line)",
     }
 
 
@@ -1279,4 +1336,14 @@ FIXUP_TYPE_MAPPING = {
     "Instruction": ctypes.c_uint32,
     "lua_Page": LuauRW_lua_Page,
     "LuaNode": LuauRW_LuaNode,
+}
+
+VALID_OBJ_CLS_MAPPING = {
+    TSTRING: LuauRW_TString,
+    TTABLE: LuauRW_Table,
+    TCLOSURE: LuauRW_Closure,
+    TUSERDATA: LuauRW_Udata,
+    TTHREAD: LuauRW_lua_State,
+    TPROTO: LuauRW_Proto,
+    TUPVAL: LuauRW_UpVal,
 }
