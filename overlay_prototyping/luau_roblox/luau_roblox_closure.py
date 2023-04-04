@@ -2,7 +2,7 @@ import struct
 
 from .consts import LUAR_ROBLOX_BASE_FUNCS, LUAR_ROBLOX_TYPES, LUAR_ROBLOX_EVENT_NAMES
 from .luau_roblox_base import LuauRobloxBase
-from .luau_roblox_overlay import LUAR_CLOSURE_RAW
+from .overlay_base import LUAR_CLOSURE_RAW
 from ..base import *
 
 

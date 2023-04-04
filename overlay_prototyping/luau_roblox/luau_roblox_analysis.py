@@ -5,7 +5,8 @@ from threading import Thread
 from .consts import *
 from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
 # from .luau_roblox_base import LuauRobloxBase
-from .luau_roblox_overlay import LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Proto, LuauRW_Table, LuauRW_UpVal, LuauRW_Closure, VALID_OBJ_CLS_MAPPING
+from .overlay_base import LuauRW_BaseStruct, LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Proto, LuauRW_Table, \
+    LuauRW_UpVal, LuauRW_Closure, VALID_OBJ_CLS_MAPPING, LuauRW_GCHeader, LuauRW_TValue
 from ..analysis import Analysis, MemRange
 from ..base import BaseException
 
@@ -26,8 +27,9 @@ GCO_NAME_MAPPING = {
     TCLOSURE: LuauRW_Closure,
     TTABLE: LuauRW_Table,
     TPROTO: LuauRW_Proto,
-    TUSERDATA: LuauRW_Udata
+    TUSERDATA: LuauRW_Udata,
 }
+
 
 class LuauRobloxAnalysis(Analysis):
 
@@ -54,35 +56,62 @@ class LuauRobloxAnalysis(Analysis):
             k: {} for k in VALID_OBJ_TYPES
         }
 
+        self.lua_gco_by_memcat = {
+            k: {} for k in VALID_OBJ_TYPES
+        }
 
+        self.safe_strings = {}
 
         self.lua_structs = {}
+        self.not_lua_objects = {k: set() for k in VALID_OBJ_TYPES}
 
-    def add_object_reference(self, obj_vaddr, ref_address):
-        obj = self.get_object(obj_vaddr)
-        if obj is None:
-            return
-
-        obj.add_reference(self, ref_address)
-
-    def add_object(self, addr, obj, ref_addr=None):
+    def add_gc_object(self, addr, obj, ref_addr=None, override_safe_check=True):
         if obj is None:
             return
         vaddr = obj.addr
-        super(LuauRobloxAnalysis, self).add_object(vaddr, obj)
+        super(LuauRobloxAnalysis, self).add_gc_object(vaddr, obj)
 
         if obj.is_valid_gc_header():
             tt = obj.get_gch().tt
             self.lua_gco[tt][addr] = obj
+            mc = obj.get_gch().memcat
+            if mc not in self.lua_gco_by_memcat:
+                self.lua_gco_by_memcat[mc] = {}
 
+            if tt not in self.lua_gco_by_memcat[mc]:
+                self.lua_gco_by_memcat[mc][tt] = {}
+
+            self.lua_gco_by_memcat[mc][tt][addr] = obj
+
+            refs = self.lrss.srcs.get(addr)
+            if refs is not None:
+                for ref in refs:
+                    raddr = ref['vaddr']
+                    self.add_gco_reference(obj, raddr)
 
         if obj.is_string() and len(str(obj.get_value())) > 0:
-            self.strings[vaddr] = obj
+            if override_safe_check or self.check_string(obj):
+                self.safe_strings[vaddr] = obj
 
-        # if obj.is_prim():
-        #     self.prims[vaddr] = obj
+    def get_lua_objs_by_memcat(self, memcat, tt=None):
+        if memcat is None:
+            return self.get_lua_objs(tt=tt)
+        objs = {}
+        mc_objs = self.lua_gco_by_memcat.get(memcat, {})
+        if len(mc_objs) == 0 or tt is not None and tt not in mc_objs:
+            return mc_objs
 
-    def get_lua_objs(self, tt=None):
+        if tt is None:
+            for tt in mc_objs.values():
+                objs.update(mc_objs)
+        else:
+            objs.update(mc_objs[tt])
+        return objs
+
+    def get_lua_objs(self, tt=None, memcat=None):
+        if memcat is not None:
+            return self.get_lua_objs_by_memcat(memcat, tt=tt)
+
         tts = []
         if tt is None:
             tts = list(self.lua_gco.keys())
@@ -90,8 +119,16 @@ class LuauRobloxAnalysis(Analysis):
             tts = [tt]
         r = {}
         for tt in tts:
-            r.update({k:v for k,v in self.lua_gco[tt].items()})
+            r.update({k: v for k, v in self.lua_gco[tt].items()})
         return r
+
+    def get_lua_object(self, vaddr, tt=None):
+        if tt is not None and vaddr in self.lua_gco[tt]:
+            return self.lua_gco[tt][vaddr]
+        for gcos in self.lua_gco.values():
+            if vaddr in gcos:
+                return gcos[vaddr]
+        return None
 
     def get_strings(self):
         return self.get_lua_objs(TSTRING)
@@ -150,35 +187,38 @@ class LuauRobloxAnalysis(Analysis):
         # self.sift_results_loaded = True
 
     def get_gco_overlay(self, vaddr, ctypes_cls, buf=None, ref_addr=None, add_obj=False, caution=False):
-        if not ctypes_cls.has_gc_header():
+        ett = getattr(ctypes_cls, '_tt_', None)
+        if ett is None or not ctypes_cls.has_gc_header() or vaddr in self.not_lua_objects[ett]:
             return None
 
         obj_sz = ctypes.sizeof(ctypes_cls)
         buf = self.read_vaddr(vaddr, obj_sz) if buf is None or len(buf) != obj_sz else buf
         if len(buf) != obj_sz and not caution:
+            self.not_lua_objects[ett].add(vaddr)
             return None
         elif len(buf) != obj_sz:
+            self.not_lua_objects[ett].add(vaddr)
             raise BaseException("Unable to read the buffer of right size for {}".format(str(ctypes_cls)))
 
         gco = ctypes_cls.from_bytes(addr=vaddr, buf=buf, analysis=self)
         vgch = gco.is_valid_gc_header()
         if not vgch and caution:
+            self.not_lua_objects[ett].add(vaddr)
             raise BaseException("Object {} has invalid header: {}".format(str(ctypes_cls), gco))
         elif not vgch:
+            self.not_lua_objects[ett].add(vaddr)
             return None
 
         if add_obj:
-            self.add_object(vaddr, gco, ref_addr=ref_addr)
+            self.add_gc_object(vaddr, gco, ref_addr=ref_addr)
         return gco
 
-    def get_overlay_obj_at(self, ctypes_cls, vaddr, ref_vaddr=None, add_obj=None, caution=False):
+    def get_overlay_obj_at(self, ctypes_cls, vaddr, ref_vaddr=None, add_obj=False, caution=False):
         if ctypes_cls is None:
             return None
 
-        if ctypes_cls.has_gc_header() and not self.is_valid_gc(vaddr, ctypes_cls):
-            if caution:
-                raise BaseException("Overlay is a GCObject, but header is invalid: @")
-
+        if ctypes_cls.has_gc_header():
+            return self.get_gco_overlay(vaddr, ctypes_cls, ref_addr=ref_vaddr, add_obj=add_obj, caution=caution)
 
         obj_sz = ctypes.sizeof(ctypes_cls)
         buf = self.read_vaddr(vaddr, obj_sz)
@@ -191,19 +231,87 @@ class LuauRobloxAnalysis(Analysis):
         obj = ctypes_cls.from_bytes(addr=vaddr, buf=buf, analysis=self)
         if obj is None and not caution:
             return None
-        else:
+        elif obj is None:
             raise BaseException("Unable to read the buffer for {}".format(str(ctypes_cls)))
 
-    def get_tstring_at(self, vaddr, ref_addr=None):
-        pass
+        if add_obj:
+            self.add_struct_object(vaddr, obj)
+            refs = self.lrss.srcs.get(addr)
+            if refs is not None:
+                for ref in refs:
+                    raddr = ref['vaddr']
+                    self.add_gco_reference(obj, raddr)
+
+        return obj
+
     def add_string_at_vaddr(self, vaddr, ref_vaddr=None):
-        if vaddr in self.strings:
-            return self.strings[vaddr]
+        obj = self.get_lua_object(vaddr, TSTRING)
+        if obj is not None and obj.is_string():
+            return obj
         data = self.read_vaddr(vaddr, self.DEFAULT_OBJECT_READ_SZ)
         s = LuauRW_TString.from_bytes(vaddr, data, analysis=self, word_sz=self.word_sz)
         if s is not None and s.is_valid_gc_header() and s.get_gch().tt == TSTRING:
-            self.add_object(s.addr, s, ref_vaddr)
+            self.add_gc_object(s.addr, s, ref_vaddr)
         return s
+
+    def bad_obj_address(self, addr):
+        for v in self.not_lua_objects.values():
+            v.add(addr)
+
+    def read_gco(self, vaddr, tt=None, add_obj=False, caution=False) -> [object | None]:
+        if tt is None:
+            gco = LuauRW_GCHeader.from_analysis(vaddr, self)
+            if gco is not None:
+                tt = gco.tt
+            else:
+                self.bad_obj_address(vaddr)
+
+        if tt not in VALID_OBJ_CLS_MAPPING:
+            return None
+        elif vaddr in self.not_lua_objects[tt]:
+            return None
+
+        cls = VALID_OBJ_CLS_MAPPING.get(tt)
+        return self.get_gco_overlay(vaddr, cls, add_obj=add_obj, caution=caution)
+
+    def read_tvalue(self, vaddr, index=0, add_obj=False, caution=False) -> [object | None]:
+        tv = LuauRW_TValue.from_analysis(vaddr, self)
+        return tv
+
+    def read_gco_ptr(self, pvaddr, tt=None, word_sz=4, little_endian=True, add_obj=False, caution=False) -> [
+        object | None]:
+        if tt is None:
+            vaddr = self.deref_address(pvaddr, word_sz, little_endian)
+            if vaddr is None:
+                self.bad_obj_address(pvaddr)
+                return None
+            gco = LuauRW_GCHeader.from_analysis(vaddr, self)
+            if gco is not None:
+                tt = gco.tt
+            else:
+                self.bad_obj_address(vaddr)
+
+        if tt not in VALID_OBJ_CLS_MAPPING:
+            return None
+        elif vaddr in self.not_lua_objects[tt]:
+            return None
+
+        cls = VALID_OBJ_CLS_MAPPING.get(tt)
+        return self.get_gco_overlay(vaddr, cls, ref_addr=pvaddr, add_obj=add_obj, caution=caution)
+
+    def read_struct_ptr(self, pvaddr: int, obj_cls: LuauRW_BaseStruct, word_sz=4, little_endian=True,
+                        add_obj=False) -> [object | None]:
+        if obj_cls.is_gco():
+            return self.read_gco_ptr(pvaddr, obj_cls._tt_, word_sz, little_endian, add_obj)
+
+        vaddr = self.deref_address(pvaddr, word_sz, little_endian)
+        if vaddr is None:
+            return None
+
+        obj = obj_cls.from_analysis(vaddr, self)
+        if obj is not None and obj.sanity_check() and add_obj:
+            self.add_gc_object(vaddr, obj, pvaddr)
+        return obj
 
     def find_lua_strings_from_sift_file(self):
         if not self.memory_loaded:
@@ -254,11 +362,6 @@ class LuauRobloxAnalysis(Analysis):
         pt_gco = {}
         global_states = [getattr(i, 'global') for i in pot_threads if i is not None]
         global_tables = []
-
-
-
-
-
 
     # @classmethod
     # def create_class(cls, name, overlay):
@@ -332,10 +435,22 @@ class LuauRobloxAnalysis(Analysis):
             self.add_string_at_vaddr(vaddr, ref_vaddr=ref_vaddr)
         return self.get_strings()
 
+    def get_builtin_strings_from_sifter_results(self):
+        pot_tstrings = self.lrss.get_potential_tstrings()
+        for ts in pot_tstrings:
+            vaddr = ts.sink_vaddr
+            if vaddr in self.strings:
+                continue
+            ref_vaddr = ts.vaddr
+            if ts.tt != 0x09:
+                continue
+            self.add_string_at_vaddr(vaddr, ref_vaddr=ref_vaddr)
+        return self.get_strings()
+
     def find_anchor_strings(self):
         if not self.is_sift_results_loaded():
             self.load_sift_results()
-        lua_strings = self.get_strings_from_sifter_results()
+        lua_strings = self.get_safe_strings()
 
         anchor_objects = {}
         for s in lua_strings.values():
@@ -362,12 +477,16 @@ class LuauRobloxAnalysis(Analysis):
         return self.anchor_objects
 
     def check_string(self, obj):
-        value = obj.get_value() if hasattr(obj, 'get_value') else None
-        if obj.marked == 0 or obj.marked not in VALID_MARKS:
+        if obj.addr in self.safe_strings:
+            return True
+        value = None if not isinstance(obj, LuauRW_TString) else obj.get_value()
+        if value is None or len(str(value)) == 0:
             return False
-        elif len(str(value)) == 0 and len(value) > 8:
-            return False
-        elif len(value) > 1024 and not all([i in string.printable for i in value]):
+        # if obj.marked == 0 or obj.marked not in VALID_MARKS:
+        #     return False
+        # elif len(str(value)) == 0 and len(value) > 8:
+        #     return False
+        elif not all([i in string.printable for i in value]):
             return False
         return True
 
@@ -377,6 +496,7 @@ class LuauRobloxAnalysis(Analysis):
         for addr, obj in lua_strings.items():
             if self.check_string(obj):
                 results[addr] = obj
+                self.add_gc_object(addr, obj, override_safe_check=True)
         return results
 
     def get_objects_in_anchor_section(self, obj_tt=None) -> [LuauSifterResult]:
@@ -435,3 +555,38 @@ class LuauRobloxAnalysis(Analysis):
             if mr.vaddr_in_range(vaddr):
                 return mr
         return None
+
+    def get_sequential_gcos(analysis, start_addr, allowed_failures=0):
+        gcos = []
+        stop = False
+
+        next_addr = start_addr
+        last_gco = None
+        failed = allowed_failures
+        while not stop:
+            try:
+                gco = analysis.get_gco(next_addr) if analysis.has_gco(next_addr) else analysis.read_gco(next_addr)
+
+
+            except:
+                gco = None
+
+            if failed <= 0:
+                break
+
+            if gco is None:
+                failed += -1
+                _next_addr = next_addr+8 if next_addr % 8 == 0 else next_addr + (next_addr % 8)
+                print("Failed at 0x{:08x}, advancing to 0x{:08x}".format(next_addr, _next_addr))
+                next_addr = _next_addr
+                continue
+            else:
+                failed = allowed_failures
+
+            last_gco = gco
+            gcos.append(gco)
+            # _next_addr = gco.get_next_gco()
+            _next_addr = next_addr + 8 if next_addr % 8 == 0 else next_addr + (next_addr % 8)
+            next_addr = _next_addr
+        stop_addr = next_addr
+        return {'gcos': sorted(gcos, key=lambda i: i.addr), "stop_addr": stop_addr}

@@ -1,6 +1,6 @@
 import struct
 
-from .luau_roblox_overlay import *
+from .overlay_base import *
 from ..base import *
 
 int_to_bytes = lambda x: struct.pack(">I", d)

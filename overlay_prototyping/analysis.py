@@ -260,6 +260,67 @@ class MemRanges(object):
     def get_memrange_from_name(self, name):
         return self.range_by_name.get(name, None)
 
+class ObjectReference(object):
+    def __init__(self, obj):
+        self.addr = obj.addr
+        self.obj = obj
+        self.references = set()
+
+    def add_reference(self, radder):
+        self.references.add(radder)
+
+    def has_reference(self, radder):
+        return radder in self.references
+
+    def get_references(self):
+        return self.references
+
+
+
+class ObjectReferences(object):
+
+    def __init__(self, *args, **kwargs):
+        super(ObjectReferences, self).__init__(*args, **kwargs)
+        self.references = {}
+        self.objects = {}
+
+    def add_object(self, obj):
+        if obj.addr not in self.objects:
+            self.objects[obj.addr] = obj
+
+    def add_reference(self, obj, raddr):
+        if not obj in self.objects:
+            self.objects[obj.addr] = obj
+            self.references[raddr] = ObjectReference(obj)
+        self.references[obj.addr].add_reference(raddr)
+
+    def get_obj(self, vaddr):
+        if not vaddr in self.objects:
+            return None
+        return self.objects[vaddr]
+
+    def has_obj(self, vaddr):
+        return vaddr in self.objects
+
+    def get_obj_addresses(self):
+        return list(self.objects)
+
+    def get_addr_references(self, vaddr):
+        if not vaddr in self.objects:
+            return None
+        return self.objects[vaddr].get_references()
+
+    def get_object_references(self, obj):
+        return self.get_addr_references(obj.addr)
+
+    def addr_has_reference(self, vaddr=None, obj=None):
+        if vaddr is not None:
+            return vaddr in self.references
+        return self.addr_has_reference(vaddr=obj.addr)
+
+    def obj_has_reference(self, obj):
+        return self.addr_has_reference(obj.addr)
+
 
 class Analysis(object):
     DEFAULT_OBJECT_READ_SZ = 16384
@@ -272,7 +333,8 @@ class Analysis(object):
         self.fh = None
         self.memory_loaded = False
 
-        self.objects_registry = {}
+        self.object_references = ObjectReferences()
+        self.struct_references = ObjectReferences()
 
         self.log = init_logger(name)
 
@@ -284,6 +346,8 @@ class Analysis(object):
 
         if load_memory_data:
             self.load_memory()
+
+
 
     def load_memory(self):
         if self.fh is None:
@@ -364,12 +428,22 @@ class Analysis(object):
 
     def read_uint(self, vaddr, word_sz=4, little_endian=True) -> [int|None]:
         e = "<" if little_endian else ">"
-        r = "H" if word_sz == 2 else "I" if word_sz == 4 else "Q"
+        r = "H" if word_sz == 2 else \
+            "I" if word_sz == 4 else \
+            "Q"
         d = self.read_vaddr(vaddr, word_sz)
         if len(d) != word_sz:
             return None
-        v, _ = struct.unpack(e+r, d)
+        v = struct.unpack(e+r, d)[0]
         return v
+
+    def read_object_ptr(self, addr, cls=None, word_sz=4, little_endian=True) -> [object|None]:
+        if cls is None:
+            return None
+        vaddr = self.deref_address(addr, word_sz, little_endian)
+        if vaddr is None:
+            return None
+        return cls.from_analysis(addr, self)
 
     def deref_address(self, vaddr, word_sz=4, little_endian=True) -> [int|None]:
         vaddr_ptr = self.read_uint(vaddr, word_sz, little_endian)
@@ -387,15 +461,57 @@ class Analysis(object):
     def update_default_read_sz(cls, sz=DEFAULT_OBJECT_READ_SZ):
         cls.DEFAULT_OBJECT_READ_SZ = sz
 
-    def add_object(self, addr, obj):
-        self.objects_registry[addr] = obj
+    def add_gc_object(self, addr, obj, raddr=None):
+        self.object_references.add_object(obj)
+        if raddr is not None:
+            self.add_gco_reference(obj, raddr)
 
-    def has_object(self, addr):
-        # TODO need to be implemented
-        return addr in self.objects_registry
+    def add_struct_object(self, addr, struct_obj, raddr=None):
+        self.struct_references.add_object(struct_obj)
+        if raddr is not None:
+            self.add_struct_reference(struct_obj, raddr)
 
-    def get_object(self, addr):
-        return self.objects_registry.get(addr, None)
+    def add_gco_reference(self, obj_or_addr, raddr):
 
-    def get_object_addresses(self):
-        return list(self.objects_registry.keys())
+        obj = obj_or_addr if not isinstance(obj_or_addr, int) else None
+        if obj is None and isinstance(obj_or_addr, int):
+            self.object_references.get_obj(obj_or_addr)
+
+        if obj is not None:
+            self.object_references.add_reference(obj, raddr)
+
+    def has_any(self, vaddr):
+        return self.has_gco(vaddr) or self.has_struct(vaddr)
+
+    def has_gco(self, addr):
+        return self.object_references.has_obj(addr)
+
+    def has_struct(self, addr):
+        return self.struct_references.has_obj(addr)
+
+    def get_gco(self, addr):
+        return self.object_references.get_obj(addr)
+
+    def get_struct(self, addr):
+        return self.struct_references.get_obj(addr)
+
+    def get_all_addresses(self):
+        return sorted(set(self.get_gco_addresses()) | set(self.get_struct_addresses()))
+
+    def get_gco_addresses(self):
+        return self.object_references.get_obj_addresses()
+
+    def get_struct_addresses(self):
+        return self.object_references.get_obj_addresses()
+
+    def get_gco_addr_references(self, addr):
+        return self.object_references.get_addr_references(addr)
+
+    def get_gco_references(self, obj):
+        return self.get_gco_addr_references(obj.addr)
+
+    def get_struct_addr_references(self, addr):
+        return self.struct_references.get_addr_references(addr)
+
+    def add_struct_reference(self, struct_obj):
+        return self.get_struct_addr_references(struct_obj.addr)

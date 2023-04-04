@@ -517,7 +517,7 @@ class BaseOverlay(object):
         kargs['unpacked_values'] = data_unpack
         d = cls(**kargs)
         if analysis and d is not None:
-            analysis.add_object(addr, d)
+            analysis.add_gc_object(addr, d)
         return d
 
     @classmethod

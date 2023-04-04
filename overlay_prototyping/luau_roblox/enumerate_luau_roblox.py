@@ -1,7 +1,7 @@
 import json
 
 from .consts import *
-from .luau_roblox_overlay import LuauRW_GCHeader
+from .overlay_base import LuauRW_GCHeader
 
 LUAR_FILTERS = {
     "addr_is_lua_object": lambda lsr: lsr.sink_vaddr % 8 == 0,
