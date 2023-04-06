@@ -285,17 +285,22 @@ class ObjectReferences(object):
         self.objects = {}
 
     def add_object(self, obj):
-        if obj.addr not in self.objects:
+        if self.is_valid_object(obj) and obj.addr not in self.objects:
             self.objects[obj.addr] = obj
+            self.references[obj.addr] = ObjectReference(obj)
+
+    def is_valid_object(self, obj):
+        return obj is not None and hasattr(obj, 'addr')
 
     def add_reference(self, obj, raddr):
-        if not obj in self.objects:
-            self.objects[obj.addr] = obj
-            self.references[raddr] = ObjectReference(obj)
+        if not self.is_valid_object(obj):
+            return
+        if not self.has_obj(obj.addr):
+            self.add_object(obj)
         self.references[obj.addr].add_reference(raddr)
 
     def get_obj(self, vaddr):
-        if not vaddr in self.objects:
+        if vaddr not in self.objects:
             return None
         return self.objects[vaddr]
 
@@ -306,7 +311,7 @@ class ObjectReferences(object):
         return list(self.objects)
 
     def get_addr_references(self, vaddr):
-        if not vaddr in self.objects:
+        if vaddr not in self.objects:
             return None
         return self.objects[vaddr].get_references()
 

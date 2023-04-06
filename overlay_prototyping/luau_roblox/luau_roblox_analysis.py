@@ -6,7 +6,7 @@ from .consts import *
 from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
 # from .luau_roblox_base import LuauRobloxBase
 from .overlay_base import LuauRW_BaseStruct, LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Proto, LuauRW_Table, \
-    LuauRW_UpVal, LuauRW_Closure, VALID_OBJ_CLS_MAPPING, LuauRW_GCHeader, LuauRW_TValue
+    LuauRW_UpVal, LuauRW_Closure, VALID_OBJ_CLS_MAPPING, LuauRW_GCHeader, LuauRW_TValue, LuauRW_global_State, LuauRW_lua_Page
 from ..analysis import Analysis, MemRange
 from ..base import BaseException
 
@@ -64,6 +64,19 @@ class LuauRobloxAnalysis(Analysis):
 
         self.lua_structs = {}
         self.not_lua_objects = {k: set() for k in VALID_OBJ_TYPES}
+
+        self.lua_table_values = {}
+
+    def read_table_values(self, ttable: LuauRW_Table, add_obj=False):
+        sizearray = ttable.sizearray
+        tvalues = {}
+        for idx in range(0, sizearray):
+            tva = ttable.get_tvalue_address(idx)
+            tvalue = LuauRW_TValue.from_analysis(tva, self)
+            tvalues[tvalue.addr] = tvalue
+            if add_obj:
+                self.add_struct_object(tva, tvalue)
+        return tvalues
 
     def add_gc_object(self, addr, obj, ref_addr=None, override_safe_check=True):
         if obj is None:
@@ -236,7 +249,7 @@ class LuauRobloxAnalysis(Analysis):
 
         if add_obj:
             self.add_struct_object(vaddr, obj)
-            refs = self.lrss.srcs.get(addr)
+            refs = self.lrss.srcs.get(vaddr)
             if refs is not None:
                 for ref in refs:
                     raddr = ref['vaddr']
@@ -346,7 +359,19 @@ class LuauRobloxAnalysis(Analysis):
         return self.get_potential_objects_from_sifter(TUSERDATA)
 
     def potentials_thread(self):
-        return self.get_potential_objects_from_sifter(TTHREAD)
+        pot = self.get_potential_objects_from_sifter(TTHREAD)
+        r = []
+        for obj in pot:
+            a = obj.addr
+            global_state = self.valid_vaddr(getattr(obj, 'global'))
+            call_info = self.valid_vaddr(obj.ci)
+            stack = self.valid_vaddr(obj.stack)
+            stack_last = self.valid_vaddr(obj.stack_last)
+            gt = self.valid_vaddr(obj.gt)
+            all_checks = [global_state, call_info, stack, stack_last, gt]
+            if all(all_checks):
+                r.append(obj)
+        return r
 
     def potentials_table(self):
         return self.get_potential_objects_from_sifter(TTABLE)
@@ -357,11 +382,25 @@ class LuauRobloxAnalysis(Analysis):
     def potentials_upvals(self):
         return self.get_potential_objects_from_sifter(TUPVAL)
 
-    def find_potential_global_state(self):
-        pot_threads = self.get_objects_in_anchor_section(TTHREAD)
-        pt_gco = {}
-        global_states = [getattr(i, 'global') for i in pot_threads if i is not None]
-        global_tables = []
+    def find_potential_global_state(self, pot_threads=None):
+        globals_results = {}
+        pot_threads = self.potentials_thread() if pot_threads is None else pot_threads
+        gs_addrs = {getattr(i, 'global'):i for i in pot_threads if i is not None and self.valid_vaddr(getattr(i, 'global'))}
+
+        global_states = [LuauRW_global_State.from_analysis(i, self, safe_load=False) for i in gs_addrs]
+        global_states = [i for i in global_states if i is not None]
+        for gs in global_states:
+            frealloc = gs.frealloc > 0 or self.valid_vaddr(gs.frealloc)
+            gray = gs.gray > 0 or self.valid_vaddr(gs.gray)
+            grayagain = gs.grayagain > 0 or self.valid_vaddr(gs.grayagain)
+            weak = gs.weak > 0 or self.valid_vaddr(gs.weak)
+            allgcopages = gs.allgcopages > 0 or self.valid_vaddr(gs.allgcopages)
+            mainthread = gs.mainthread > 0 or self.valid_vaddr(gs.mainthread)
+            # mainthread_in_threads = mainthread in gs_addrs # and gs_addrs[mainthread] == gs
+            all_checks = [frealloc, gray, grayagain, weak, allgcopages, mainthread, ]
+            if all(all_checks):
+                globals_results[gs.addr] = gs
+        return globals_results
 
     # @classmethod
     # def create_class(cls, name, overlay):
@@ -556,8 +595,8 @@ class LuauRobloxAnalysis(Analysis):
                 return mr
         return None
 
-    def get_sequential_gcos(analysis, start_addr, allowed_failures=0):
-        gcos = []
+    def read_sequential_gcos_incr(analysis, start_addr, allowed_failures=0, stop_addr=None):
+        gcos = {}
         stop = False
 
         next_addr = start_addr
@@ -584,9 +623,127 @@ class LuauRobloxAnalysis(Analysis):
                 failed = allowed_failures
 
             last_gco = gco
-            gcos.append(gco)
+            gcos[gco.addr] = gco
             # _next_addr = gco.get_next_gco()
             _next_addr = next_addr + 8 if next_addr % 8 == 0 else next_addr + (next_addr % 8)
             next_addr = _next_addr
+            if isinstance(stop_addr, int) and stop_addr >= next_addr:
+                break
+
         stop_addr = next_addr
         return {'gcos': sorted(gcos, key=lambda i: i.addr), "stop_addr": stop_addr}
+
+    def read_sequential_gcos_decrement(analysis, start_addr, allowed_failures=3, stop_addr=None, block_size=32):
+        gcos = {}
+        stop = False
+
+        next_addr = start_addr if start_addr % 8 == 0 else start_addr - (start_addr % 8)
+        last_gco = None
+        failed = allowed_failures
+        failures = []
+        while not stop:
+            try:
+                gco = analysis.get_gco(next_addr) if analysis.has_gco(next_addr) else analysis.read_gco(next_addr)
+            except:
+                gco = None
+
+            if failed <= 0:
+                break
+            value = analysis.read_uint(next_addr)
+            if value == 0:
+                _next_addr = next_addr - 8
+                next_addr = _next_addr
+                continue
+            elif gco is None:
+                failed += -1
+                _next_addr = next_addr - 8
+                failures.append(next_addr)
+                print("Failed at 0x{:08x}, advancing to 0x{:08x}".format(next_addr, _next_addr))
+                next_addr = _next_addr
+                continue
+            else:
+                failed = allowed_failures
+
+            gcos[gco.addr] = gco
+            # _next_addr = gco.get_next_gco()
+            _next_addr = next_addr - block_size
+            next_addr = _next_addr
+            if isinstance(stop_addr, int) and stop_addr >= next_addr:
+                break
+
+        stop_addr = next_addr
+        return {'gcos': sorted(gcos.values(), key=lambda i: i.addr), "stop_addr": stop_addr, "failures":failures}
+
+    def find_lua_page_header(self, start_addr=None, allowed_failures=3, stop_addr=None, block_size=32):
+        self.log.debug("Searching for lua_pages using 32-byte sizeclass page")
+        if start_addr == None:
+            self.log.debug("No start address specified, so using known internal type strings")
+            tstrings = self.get_strings()
+            astrs = [o for o in tstrings.values() if o.get_value() in LUAR_ROBLOX_EVENT_NAMES]
+            astrs = sorted(astrs, key=lambda a: a.addr)
+            start_addr = astrs[0].addr
+
+        self.log.debug("Scanning memory segment backwards starting at address: 0x{:08x}".format(start_addr))
+        gco_page_scan = self.read_sequential_gcos_decrement(start_addr, allowed_failures=allowed_failures, block_size=block_size)
+        pot_page_addr = gco_page_scan['stop_addr']
+        end_addr = start_addr
+        if len(gco_page_scan['gcos']) > 0:
+            end_addr = gco_page_scan['gcos'][0].addr
+        else:
+            self.log.debug(
+                "No gcos found in the page, suspect using start address for end of search: 0x{:08x}".format(start_addr))
+
+        # adding some wiggle room to find the page.  also making sure address falls on the 8-byte boundary
+        pot_page_addr = pot_page_addr - ctypes.sizeof(LuauRW_lua_Page)
+        pot_page_addr = pot_page_addr if pot_page_addr % 8 == 0 else pot_page_addr - (pot_page_addr % 8)
+
+        self.log.debug("Searching for the Luau lua_Page header between 0x{:08x} and 0x{:08x}".format(pot_page_addr, end_addr))
+
+        while pot_page_addr < end_addr:
+            lua_page = LuauRW_lua_Page.from_analysis(pot_page_addr, analysis=self, safe_load=False)
+            if lua_page.pageSize == 0x3fe8 and lua_page.blockSize == 32:
+                self.log.debug(
+                    "Found a potential lua_Page header at 0x{:08x}".format(lua_page.addr))
+                break
+            else:
+                lua_page = None
+            pot_page_addr += 8
+
+        lua_pages = []
+        if lua_page is not None:
+            lua_pages = []
+            # walk GCO List forward
+            self.log.debug(
+                "Walking the lua_Page linked lists forward from at 0x{:08x}".format(lua_page.gcolistnext))
+            nlp = lua_page
+            while True:
+                if nlp is None or nlp.gcolistnext == 0 or not self.valid_vaddr(nlp.gcolistnext):
+                    break
+                nlp = LuauRW_lua_Page.from_analysis(nlp.gcolistnext, analysis=self, safe_load=False)
+                if nlp is not None:
+                    lua_pages.append(nlp)
+            # walk GCO List backward
+            self.log.debug(
+                "Walking the lua_Page linked lists backward from at 0x{:08x}".format(lua_page.gcolistprev))
+            nlp = lua_page
+            while True:
+                if nlp is None or nlp.gcolistprev == 0 or not self.valid_vaddr(nlp.gcolistprev):
+                    break
+                nlp = LuauRW_lua_Page.from_analysis(nlp.gcolistprev, analysis=self, safe_load=False)
+                if nlp is not None:
+                    lua_pages.append(nlp)
+            lua_pages = sorted(lua_pages, key=lambda x: x.addr)
+        return lua_pages
+
+    def get_last_page_block(self, lua_page: LuauRW_lua_Page):
+        if lua_page is None:
+            return None
+
+        offset = lua_page.freeNext + lua_page.get_offset('data') + lua_page.blockSize
+        return lua_page.addr + offset
+
+
+
+
+
+

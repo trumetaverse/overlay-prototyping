@@ -273,7 +273,7 @@ class Transmute_BaseLES(LittleEndianStructure):
     @classmethod
     def from_analysis(cls, addr, analysis, word_size=4, safe_load=True):
         buf = analysis.read_vaddr(addr, sizeof(cls))
-        if buf is None or len(buf) != sizeof(cls) and safe_load:
+        if safe_load and (buf is None or len(buf) != sizeof(cls)):
             raise BaseException("Failed to read bytes for {}".format(str(type(cls))))
         return cls.from_bytes(addr, buf, analysis=analysis, word_sz=word_size)
 
