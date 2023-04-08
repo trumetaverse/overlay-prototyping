@@ -6,7 +6,8 @@ from .consts import *
 from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
 # from .luau_roblox_base import LuauRobloxBase
 from .overlay_base import LuauRW_BaseStruct, LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Proto, LuauRW_Table, \
-    LuauRW_UpVal, LuauRW_Closure, VALID_OBJ_CLS_MAPPING, LuauRW_GCHeader, LuauRW_TValue, LuauRW_global_State, LuauRW_lua_Page
+    LuauRW_UpVal, LuauRW_Closure, VALID_OBJ_CLS_MAPPING, LuauRW_GCHeader, LuauRW_TValue, LuauRW_global_State, \
+    LuauRW_lua_Page
 from ..analysis import Analysis, MemRange
 from ..base import BaseException
 
@@ -96,7 +97,7 @@ class LuauRobloxAnalysis(Analysis):
 
             self.lua_gco_by_memcat[mc][tt][addr] = obj
 
-            refs = self.lrss.srcs.get(addr)
+            refs = self.lrss.gco_srcs.get(addr)
             if refs is not None:
                 for ref in refs:
                     raddr = ref['vaddr']
@@ -168,9 +169,12 @@ class LuauRobloxAnalysis(Analysis):
         if self.sift_results_loaded:
             return True
         elif self.load_srt and self.load_srt.is_alive():
-            self.log.debug("Still loading {} results from {}".format(len(self.lrss.results), self.raw_sift_results))
+            self.log.debug(
+                "Still loading. loaded potential gcos from {} and potential structs {} results from {}".format(
+                    len(self.lrss.gco_results), len(self.lrss.struct_results), self.raw_sift_results))
             return False
-        self.log.debug("Completed loading {} results from {}".format(len(self.lrss.results), self.raw_sift_results))
+        self.log.debug("Completed. loaded potential gcos from {} and potential structs {} results from {}".format(
+                    len(self.lrss.gco_results), len(self.lrss.struct_results), self.raw_sift_results))
         self.sift_results_loaded = True
         self.load_srt = None
         return True
@@ -190,8 +194,8 @@ class LuauRobloxAnalysis(Analysis):
 
         self.log.debug("Loading luau-sifter results from {}".format(self.raw_sift_results))
         self.lrss = LuauSifterResults()
-        kwargs = {'parse_gc_header': False, 'bulk_load': bulk_load}
-        self.load_srt = Thread(target=self.lrss.parse_file, kwargs=kwargs, args=(self.raw_sift_results,))
+        kwargs = {'parse_gc_header': False, 'bulk_load': bulk_load, 'callback':self.check_results_status}
+        self.load_srt = Thread(target=self.lrss.parse_file, kwargs=kwargs, args=(self.raw_sift_results, ))
         self.load_srt.start()
         if not background:
             self.load_srt.join()
@@ -249,7 +253,7 @@ class LuauRobloxAnalysis(Analysis):
 
         if add_obj:
             self.add_struct_object(vaddr, obj)
-            refs = self.lrss.srcs.get(vaddr)
+            refs = self.lrss.gco_srcs.get(vaddr)
             if refs is not None:
                 for ref in refs:
                     raddr = ref['vaddr']
@@ -385,7 +389,8 @@ class LuauRobloxAnalysis(Analysis):
     def find_potential_global_state(self, pot_threads=None):
         globals_results = {}
         pot_threads = self.potentials_thread() if pot_threads is None else pot_threads
-        gs_addrs = {getattr(i, 'global'):i for i in pot_threads if i is not None and self.valid_vaddr(getattr(i, 'global'))}
+        gs_addrs = {getattr(i, 'global'): i for i in pot_threads if
+                    i is not None and self.valid_vaddr(getattr(i, 'global'))}
 
         global_states = [LuauRW_global_State.from_analysis(i, self, safe_load=False) for i in gs_addrs]
         global_states = [i for i in global_states if i is not None]
@@ -445,7 +450,7 @@ class LuauRobloxAnalysis(Analysis):
         mr = self.get_memrange(vaddr)
         if mr is None:
             return results
-        sinks = self.lrss.results.values()
+        sinks = self.lrss.gco_results.values()
         for v in sinks:
             addr = v.sink_vaddr
             if mr.start <= addr < mr.end:
@@ -457,7 +462,7 @@ class LuauRobloxAnalysis(Analysis):
         mr = self.get_memrange(vaddr)
         if mr is None:
             return results
-        sinks = self.lrss.results.items()
+        sinks = self.lrss.gco_results.items()
         for k, v in sinks:
             addr = k
             if mr.start <= addr < mr.end:
@@ -615,7 +620,7 @@ class LuauRobloxAnalysis(Analysis):
 
             if gco is None:
                 failed += -1
-                _next_addr = next_addr+8 if next_addr % 8 == 0 else next_addr + (next_addr % 8)
+                _next_addr = next_addr + 8 if next_addr % 8 == 0 else next_addr + (next_addr % 8)
                 print("Failed at 0x{:08x}, advancing to 0x{:08x}".format(next_addr, _next_addr))
                 next_addr = _next_addr
                 continue
@@ -672,7 +677,7 @@ class LuauRobloxAnalysis(Analysis):
                 break
 
         stop_addr = next_addr
-        return {'gcos': sorted(gcos.values(), key=lambda i: i.addr), "stop_addr": stop_addr, "failures":failures}
+        return {'gcos': sorted(gcos.values(), key=lambda i: i.addr), "stop_addr": stop_addr, "failures": failures}
 
     def find_lua_page_header(self, start_addr=None, allowed_failures=3, stop_addr=None, block_size=32):
         self.log.debug("Searching for lua_pages using 32-byte sizeclass page")
@@ -684,7 +689,8 @@ class LuauRobloxAnalysis(Analysis):
             start_addr = astrs[0].addr
 
         self.log.debug("Scanning memory segment backwards starting at address: 0x{:08x}".format(start_addr))
-        gco_page_scan = self.read_sequential_gcos_decrement(start_addr, allowed_failures=allowed_failures, block_size=block_size)
+        gco_page_scan = self.read_sequential_gcos_decrement(start_addr, allowed_failures=allowed_failures,
+                                                            block_size=block_size)
         pot_page_addr = gco_page_scan['stop_addr']
         end_addr = start_addr
         if len(gco_page_scan['gcos']) > 0:
@@ -697,7 +703,8 @@ class LuauRobloxAnalysis(Analysis):
         pot_page_addr = pot_page_addr - ctypes.sizeof(LuauRW_lua_Page)
         pot_page_addr = pot_page_addr if pot_page_addr % 8 == 0 else pot_page_addr - (pot_page_addr % 8)
 
-        self.log.debug("Searching for the Luau lua_Page header between 0x{:08x} and 0x{:08x}".format(pot_page_addr, end_addr))
+        self.log.debug(
+            "Searching for the Luau lua_Page header between 0x{:08x} and 0x{:08x}".format(pot_page_addr, end_addr))
 
         while pot_page_addr < end_addr:
             lua_page = LuauRW_lua_Page.from_analysis(pot_page_addr, analysis=self, safe_load=False)
@@ -741,9 +748,3 @@ class LuauRobloxAnalysis(Analysis):
 
         offset = lua_page.freeNext + lua_page.get_offset('data') + lua_page.blockSize
         return lua_page.addr + offset
-
-
-
-
-
-

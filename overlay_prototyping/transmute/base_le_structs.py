@@ -151,15 +151,6 @@ class Transmute_BaseLES(LittleEndianStructure):
             return str(ft)
         return "{} as {}".format(alias, ft)
 
-    @classmethod
-    def is_field_array(cls, name):
-        _ncls = cls._fields_dict_[name]
-        if hasattr(_ncls, '__class__') and str(_ncls.__class__).find('ArrayType') > 0:
-            return True
-        elif hasattr(_ncls, '__name__') and str(_ncls.__name__).find('_Array_') > 0:
-            return True
-        return False
-
     def get_dump(self, word_sz=None, addr=0):
         if word_sz is None:
             word_sz = 4 if getattr(self, 'word_sz', None) is None else getattr(self, 'word_sz', None)
@@ -343,3 +334,7 @@ class Transmute_BaseLES(LittleEndianStructure):
 
     def get_next_gco(self):
         return None
+
+    def addr_of(self, fld_name):
+        offset = self.get_offset(fld_name)
+        return self.addr + offset

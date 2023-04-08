@@ -156,6 +156,40 @@ class LuauRW_BaseStruct(Transmute_BaseLES):
         fld = self.get_gch()
         return fld is not None and fld.tt in {TNUMBER, TBOOLEAN, TVECTOR, TNIL}
 
+    @classmethod
+    def lua_hash_string(cls, value):
+        a = 0
+        b = 0
+        length = len(str)
+        h = len(str)
+
+        while length >= 32:
+            block = struct.unpack("III", str[:12])
+            a += block[0]
+            b += block[1]
+            h += block[2]
+            u = 14
+            v = 11
+            w = 25
+            a ^= h
+            a -= ((h << u) | (h >> (32 - u)))
+            b ^= a
+            b -= ((a << v) | (a >> (32 - v)))
+            h ^= b
+            h -= ((b << w) | (b >> (32 - w)))
+            str = str[12:]
+            length -= 12
+
+        for i in range(length):
+            h ^= ((h << 5) + (h >> 2) + ord(str[i]))
+
+        b = struct.pack('>Q', h)
+        h = struct.unpack('>I', b[-4:])[0]
+        return h
+
+    def lua_hash_value(self):
+        return None
+
 
 class LuauRW_BaseUnion(Transmute_BaseLEU):
     _OVERLAY_TYPE_ = 'LuauRW'
@@ -291,12 +325,14 @@ class LuauRW_TString(LuauRW_BaseStruct):
 
     def get_dump(self, word_sz=None, addr=0):
         r, flat = super(LuauRW_TString, self).get_dump( word_sz=None)
-        vo = self.get_value_offset()
+
         addr = self.addr if self.addr is not None and self.addr > 0 else addr
         # addr = getattr(self, 'addr') if hasattr(self, 'addr') else 0
         addr = addr + vo if vo is not None else addr
-        if vo is not None:
-            x = {"name": "data", "value": self.get_value()[:80], "addr": addr, 'type': 'char[]', 'offset': vo,
+        v = self.get_value()
+        vo = self.get_value_offset()
+        if v is not None:
+            x = {"name": "data", "value":v[:80], "addr": addr, 'type': 'char[]', 'offset': vo,
                  "fmt": "{}", "is_array": False}
             r[x['addr']] = x
             flat.append(x)
@@ -351,6 +387,12 @@ class LuauRW_TString(LuauRW_BaseStruct):
         if sz % 8 != 0:
             sz = sz + 8 - (sz % 8)
         return sz + self.addr
+
+    def lua_hash_value(self):
+        value = self.get_value()
+        if value is not None:
+            return self.lua_hash_string(value)
+        return None
 
 
 class LuauRW_ForceAlignment(LuauRW_BaseUnion):
@@ -791,9 +833,9 @@ class LuauRW_lua_ExecutionCallbacks(LuauRW_BaseStruct):
     __field_def__ = {
         "context": {"type": "c_uint32"},
         "close": {"type": "c_uint32"},
-        "destroy": {"type": "c_int32"},
-        "enter": {"type": "c_int32"},
-        "setbreakpoint": {"type": "c_int32"},
+        "destroy": {"type": "c_uint32"},
+        "enter": {"type": "c_uint32"},
+        "setbreakpoint": {"type": "c_uint32"},
 
     }
     _fields_ = LuauRW_BaseStruct.create_fields(__field_def__)
@@ -959,7 +1001,6 @@ class LuauRW_global_State(LuauRW_BaseStruct):
         "ttname": {"type": "c_uint32 * LUA_T_COUNT"},
         "tmname": {"type": "c_uint32 * TMS_CNT"},
         "pseudotemp": {"type": "LuauRW_TValue"},
-        "registry": {"type": "LuauRW_TValue"},
         "registry": {"type": "c_int32"},
         "errorjmp": {"type": "c_uint32"},
         "rngstate": {"type": "c_uint64"},

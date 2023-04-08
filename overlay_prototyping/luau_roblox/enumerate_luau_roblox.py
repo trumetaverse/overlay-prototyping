@@ -79,21 +79,23 @@ class LuauSifterResult(object):
 
 class LuauSifterResults(object):
     def __init__(self):
-        self.srcs = {}
+        self.gco_srcs = {}
         self.obj_references = {}
         self.all_pot_gco = {}
         self.potential_gcheaders = {}
-        self.densities = {}
-        self.results = {}
-        self.unknown = {}
+        self.densities_gco = {}
+        self.gco_results = {}
+        self.unknown_gcos = {}
+        self.struct_srcs = {}
+        self.struct_results = {}
 
         self.pot_lua_gco = {
             k: {} for k in VALID_OBJ_TYPES
         }
 
 
-    def add_sifter_result(self, r):
-        self.results[r.vaddr] = r
+    def add_pot_gco_sifter_result(self, r):
+        self.gco_results[r.vaddr] = r
         if r.is_valid_gc_header():
             self.all_pot_gco[r.sink_vaddr] = r
             self.pot_lua_gco[r.tt][r.sink_vaddr] = r
@@ -101,17 +103,23 @@ class LuauSifterResults(object):
                 self.obj_references[r.sink_vaddr] = set()
 
             self.obj_references[r.sink_vaddr].add(r.vaddr)
-            if r.sink_vaddr_base not in self.densities:
-                self.densities[r.sink_vaddr_base] = set()
-            self.densities[r.sink_vaddr_base].add(r.sink_vaddr)
+            if r.sink_vaddr_base not in self.densities_gco:
+                self.densities_gco[r.sink_vaddr_base] = set()
+            self.densities_gco[r.sink_vaddr_base].add(r.sink_vaddr)
 
         else:
-            self.unknown[r.sink_vaddr] = r
+            self.unknown_gcos[r.sink_vaddr] = r
 
-        if r.sink_vaddr not in self.srcs:
-            self.srcs[r.sink_vaddr] = []
+        if r.sink_vaddr not in self.gco_srcs:
+            self.gco_srcs[r.sink_vaddr] = []
 
-        self.srcs[r.sink_vaddr].append({'vaddr': r.vaddr, 'paddr': r.paddr})
+        self.gco_srcs[r.sink_vaddr].append({'vaddr': r.vaddr, 'paddr': r.paddr})
+
+    def add_pot_structure_sifter_result(self, r):
+        self.struct_results[r.vaddr] = r
+        if r.sink_vaddr not in self.struct_srcs:
+            self.struct_srcs[r.sink_vaddr] = []
+        self.struct_srcs[r.sink_vaddr].append({'vaddr': r.vaddr, 'paddr': r.paddr})
 
     def get_lua_objs(self, tt=None) -> dict[int, LuauSifterResult]:
         tts = []
@@ -152,10 +160,12 @@ class LuauSifterResults(object):
     def parse_line(self, line, parse_gc_header=False) -> LuauSifterResult:
         r = LuauSifterResult.from_line(line, parse_gc_header=parse_gc_header)
         if r.potential_lua_object():
-            self.add_sifter_result(r)
+            self.add_pot_gco_sifter_result(r)
+        else:
+            self.add_pot_structure_sifter_result(r)
         return r
 
-    def parse_file(self, filename, parse_gc_header=False, bulk_load=True):
+    def parse_file(self, filename, parse_gc_header=False, bulk_load=True, callback=None):
         fh = open(filename)
         if bulk_load:
             data = fh.readlines()
@@ -166,6 +176,9 @@ class LuauSifterResults(object):
             for line in fh:
                 self.parse_line(line, parse_gc_header=parse_gc_header)
                 cnt += 1
+
+        if callback:
+            callback()
 
     def get_potential_tstrings(self) -> list[LuauSifterResult]:
         pot_objects = list(self.all_pot_gco.values())
