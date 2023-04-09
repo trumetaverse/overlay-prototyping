@@ -160,11 +160,11 @@ class LuauRW_BaseStruct(Transmute_BaseLES):
     def lua_hash_string(cls, value):
         a = 0
         b = 0
-        length = len(str)
-        h = len(str)
+        length = len(value)
+        h = len(value)
 
         while length >= 32:
-            block = struct.unpack("III", str[:12])
+            block = struct.unpack("III", value[:12])
             a += block[0]
             b += block[1]
             h += block[2]
@@ -177,11 +177,11 @@ class LuauRW_BaseStruct(Transmute_BaseLES):
             b -= ((a << v) | (a >> (32 - v)))
             h ^= b
             h -= ((b << w) | (b >> (32 - w)))
-            str = str[12:]
+            value = value[12:]
             length -= 12
 
         for i in range(length):
-            h ^= ((h << 5) + (h >> 2) + ord(str[i]))
+            h ^= ((h << 5) + (h >> 2) + ord(value[i]))
 
         b = struct.pack('>Q', h)
         h = struct.unpack('>I', b[-4:])[0]
