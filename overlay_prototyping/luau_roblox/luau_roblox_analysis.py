@@ -107,6 +107,7 @@ class LuauRobloxAnalysis(Analysis):
             if override_safe_check or self.check_string(obj):
                 self.safe_strings[vaddr] = obj
 
+
     def get_lua_objs_by_memcat(self, memcat, tt=None):
         if memcat is None:
             return self.get_lua_objs(tt=tt)
@@ -269,6 +270,10 @@ class LuauRobloxAnalysis(Analysis):
         s = LuauRW_TString.from_bytes(vaddr, data, analysis=self, word_sz=self.word_sz)
         if s is not None and s.is_valid_gc_header() and s.get_gch().tt == TSTRING:
             self.add_gc_object(s.addr, s, ref_vaddr)
+            nvaddr = s.next
+            if nvaddr != 0x0:
+                _ = self.add_string_at_vaddr(s.next, s.addr_of("next"))
+                # self.add_gc_object(nv.addr, nv, s.addr_of("next"))
         return s
 
     def bad_obj_address(self, addr):
@@ -534,10 +539,15 @@ class LuauRobloxAnalysis(Analysis):
             return False
         return True
 
-    def get_safe_strings(self):
+    def get_safe_strings(self, rerun=True):
+        if not rerun:
+            return self.safe_strings
         lua_strings = self.get_strings_from_sifter_results()
         results = {}
         for addr, obj in lua_strings.items():
+            if addr in self.safe_strings:
+                results[addr] = obj
+                continue
             if self.check_string(obj):
                 results[addr] = obj
                 self.add_gc_object(addr, obj, override_safe_check=True)

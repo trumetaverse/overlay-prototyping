@@ -328,9 +328,9 @@ class LuauRW_TString(LuauRW_BaseStruct):
 
         addr = self.addr if self.addr is not None and self.addr > 0 else addr
         # addr = getattr(self, 'addr') if hasattr(self, 'addr') else 0
+        vo = self.get_value_offset()
         addr = addr + vo if vo is not None else addr
         v = self.get_value()
-        vo = self.get_value_offset()
         if v is not None:
             x = {"name": "data", "value":v[:80], "addr": addr, 'type': 'char[]', 'offset': vo,
                  "fmt": "{}", "is_array": False}
@@ -885,7 +885,7 @@ class LuauRW_stringtable(LuauRW_BaseStruct):
         "hash": {"type": "c_uint32"},
         "nuse": {"type": "c_uint32"},
         "size": {"type": "c_int32"},
-        "enter": {"type": "c_int32"},
+        "enter": {"type": "c_uint32"},
 
     }
     _fields_ = LuauRW_BaseStruct.create_fields(__field_def__)
