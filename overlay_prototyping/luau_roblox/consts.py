@@ -1,5 +1,5 @@
 
-
+UNINT_MAX = 4294967295
 LUAR_ROBLOX_EVENT_NAMES = [
     "__index",
     "__newindex",
