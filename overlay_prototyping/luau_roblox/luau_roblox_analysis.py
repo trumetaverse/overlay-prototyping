@@ -358,38 +358,99 @@ class LuauRobloxAnalysis(Analysis):
                     results.append(o)
         return results
 
-    def potentials_tstrings(self):
-        return self.get_potential_objects_from_sifter(TSTRING)
+    def potentials_tstrings(self, sanity_check=False, add_obj=False):
+        tstrings = self.get_potential_objects_from_sifter(TSTRING)
+        if add_obj:
+            for o in tstrings:
+                self.add_gc_object(o.addr, o)
+        return tstrings
 
-    def potentials_closures(self):
-        return self.get_potential_objects_from_sifter(TCLOSURE)
-
-    def potentials_userdata(self):
-        return self.get_potential_objects_from_sifter(TUSERDATA)
-
-    def potentials_thread(self):
-        pot = self.get_potential_objects_from_sifter(TTHREAD)
-        r = []
-        for obj in pot:
-            a = obj.addr
-            global_state = self.valid_vaddr(getattr(obj, 'global'))
-            call_info = self.valid_vaddr(obj.ci)
-            stack = self.valid_vaddr(obj.stack)
-            stack_last = self.valid_vaddr(obj.stack_last)
-            gt = self.valid_vaddr(obj.gt)
-            all_checks = [global_state, call_info, stack, stack_last, gt]
-            if all(all_checks):
-                r.append(obj)
+    def potentials_closures(self, sanity_check=False, add_obj=False):
+        r = self.get_potential_objects_from_sifter(TCLOSURE)
+        if sanity_check:
+            tables = self.potentials_table(sanity_check=sanity_check)
+            dtables = {i.addr: i for i in tables}
+            closures = []
+            for obj in r:
+                if self.valid_vaddr(obj.env):
+                    c_env = LuauRW_Table.from_analysis(obj.env, self)
+                    if c_env and c_env.addr in dtables:
+                        closures.append(obj)
+            if add_obj:
+                for o in closures:
+                    self.add_gc_object(o.addr, o)
+            return closures
         return r
 
-    def potentials_table(self):
-        return self.get_potential_objects_from_sifter(TTABLE)
+    def potentials_userdata(self, sanity_check=False, add_obj=False):
+        r = self.get_potential_objects_from_sifter(TUSERDATA)
+        if sanity_check:
+            tables = self.potentials_table(sanity_check=sanity_check)
+            dtables = {i.addr: i for i in tables}
+            userdatas = []
+            for obj in r:
+                if self.valid_vaddr(obj.metatable):
+                    mt = LuauRW_Table.from_analysis(obj.metatable, self)
+                    if mt and mt.addr in dtables:
+                        userdatas.append(obj)
+            if add_obj:
+                for o in userdatas:
+                    self.add_gc_object(o.addr, o)
+            return userdatas
+        return r
 
-    def potentials_prototypes(self):
+    def potentials_thread(self, sanity_check=False, add_obj=False):
+        r = self.get_potential_objects_from_sifter(TTHREAD)
+        if sanity_check:
+            threads = []
+            for obj in r:
+                global_state = self.valid_vaddr(getattr(obj, 'global'))
+                call_info = self.valid_vaddr(obj.ci)
+                stack = self.valid_vaddr(obj.stack)
+                stack_last = self.valid_vaddr(obj.stack_last)
+                gt = self.valid_vaddr(obj.gt)
+                all_checks = [global_state, call_info, stack, stack_last, gt]
+                if all(all_checks):
+                    threads.append(obj)
+            if add_obj:
+                for o in threads:
+                    self.add_gc_object(o.addr, o)
+            return threads
+        return r
+
+    def potentials_table(self, sanity_check=False, add_obj=False):
+        r = self.get_potential_objects_from_sifter(TTABLE)
+        if sanity_check:
+            tables = {}
+            dt = {i.addr: i for i in r}
+            for t in r:
+                if self.valid_vaddr(t.metatable) and t.metatable in dt:
+                    tables[t.addr] = t
+                    tables[t.metatable] = t
+            tables = list(tables.values())
+            if add_obj:
+                for o in tables:
+                    self.add_gc_object(o.addr, o)
+            return tables
+        return r
+
+    def potentials_prototypes(self, sanity_check=False, add_obj=False):
         return self.get_potential_objects_from_sifter(TPROTO)
 
-    def potentials_upvals(self):
-        return self.get_potential_objects_from_sifter(TUPVAL)
+    def potentials_upvals(self, sanity_check=False, add_obj=False):
+        r = self.get_potential_objects_from_sifter(TUPVAL)
+        if sanity_check:
+            upvals = []
+            for obj in r:
+                if self.valid_vaddr(obj.v):
+                    tvalue = LuauRW_TValue.from_analysis(obj.v, self)
+                    if tvalue and tvalue.tt in VALID_OBJ_CLS_MAPPING:
+                        upvals.append(obj)
+            if add_obj:
+                for o in upvals:
+                    self.add_gc_object(o.addr, o)
+            return upvals
+        return r
 
     def find_potential_global_state(self, pot_threads=None):
         globals_results = {}

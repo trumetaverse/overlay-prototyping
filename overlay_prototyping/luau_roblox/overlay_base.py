@@ -580,7 +580,7 @@ class LuauRW_UpVal(LuauRW_BaseStruct):
 class LuauRW_Proto(LuauRW_BaseStruct):
     _gco_ = True
     _has_sanity_check_ = True
-    _tt_ = TCLOSURE
+    _tt_ = TPROTO
     __field_def__ = {
         "tt": {"type": "c_uint8"},
         "marked": {"type": "c_uint8"},
@@ -638,6 +638,9 @@ class LuauRW_Proto(LuauRW_BaseStruct):
         return self.addr + self.get_total_size()
 
 class LuauRW_ProtoECB(LuauRW_BaseStruct):
+    _gco_ = True
+    _has_sanity_check_ = True
+    _tt_ = TPROTO
     __field_def__ = {
         "tt": {"type": "c_uint8"},
         "marked": {"type": "c_uint8"},
