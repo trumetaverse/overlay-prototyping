@@ -1,5 +1,8 @@
 
 UNINT_MAX = 4294967295
+LUA_MINSTACK = 20
+MAXSSIZE = (1 << 30)
+
 LUAR_ROBLOX_EVENT_NAMES = [
     "__index",
     "__newindex",
@@ -259,7 +262,7 @@ VALID_OBJ_TYPES = {
     "upval": TUPVAL,
 }
 
-LUAR_ROBLOX_TAG_TYPES = {
+LUA_TAG_TYPES = {
     TNIL: "nil",
     TBOOLEAN: "boolean",
     TLIGHTUSERDATA: "userdata",
