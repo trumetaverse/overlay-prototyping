@@ -273,14 +273,14 @@ class LuauRobloxAnalysis(Analysis):
                 "Still loading. loaded potential gcos from {} and potential structs {} results from {}".format(
                     len(self.lrss.gco_results), len(self.lrss.struct_results), self.raw_sift_results))
             return False
+        return self.mark_complete()
 
-        if getattr(self, 'load_srt', None) and not self.sift_results_loaded:
-            return False
-        self.log.debug("Completed. loaded potential gcos from {} and potential structs {} results from {}".format(
-            len(self.lrss.gco_results), len(self.lrss.struct_results), self.raw_sift_results))
-        self.sift_results_loaded = True
-        self.load_srt = None
-        return True
+    def check_analysis_status(self) -> bool:
+        if self.check_results_status() and isinstance(self.analysis_results, dict):
+            self.log.debug(
+                "Lua Automatic Memory Analysis Completed ".format())
+            return True
+        return False
 
     def is_sift_results_loaded(self) -> bool:
         return self.sift_results_loaded
@@ -386,6 +386,7 @@ class LuauRobloxAnalysis(Analysis):
         self.analysis_results = {'unreferenced_gco': new_gcos, "table": tables, "prototype": prototypes,
                                  'lua_State': threads,
                                  "tstring": tstrings, "closures": closures, "userdata": useer_datas, "upvals": upvals}
+        self.log.debug("Completed auto analysis for Lua Objects".format())
         return self.analysis_results
 
     def mark_complete(self, from_callback=False):
