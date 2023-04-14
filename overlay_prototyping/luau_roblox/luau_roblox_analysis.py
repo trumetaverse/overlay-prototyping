@@ -1,5 +1,6 @@
 import ctypes
 import string
+import threading
 from threading import Thread
 
 from .consts import *
@@ -137,6 +138,8 @@ class LuauRobloxAnalysis(Analysis):
         self.strings = {}
         self.prims = {}
         self.load_srt = None
+        self.analysis_thread = None
+        self.analysis_results = None
         if not hasattr(self, 'is_32bit'):
             self.is_32bit = True
 
@@ -217,7 +220,7 @@ class LuauRobloxAnalysis(Analysis):
             objs.update(mc_objs[tt])
         return objs
 
-    def get_lua_objs(self, tt=None, memcat=None)->dict[
+    def get_lua_objs(self, tt=None, memcat=None) -> dict[
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         if memcat is not None:
             return self.get_lua_objs_by_memcat(memcat, tt=tt)
@@ -232,7 +235,8 @@ class LuauRobloxAnalysis(Analysis):
             r.update({k: v for k, v in self.lua_gco[tt].items()})
         return r
 
-    def get_lua_object(self, vaddr, tt=None) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
+    def get_lua_object(self, vaddr,
+                       tt=None) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
         if tt is not None and vaddr in self.lua_gco[tt]:
             return self.lua_gco[tt][vaddr]
         for gcos in self.lua_gco.values():
@@ -249,7 +253,7 @@ class LuauRobloxAnalysis(Analysis):
     def get_closures(self) -> dict[LuauRW_Closure]:
         return self.get_lua_objs(TCLOSURE)
 
-    def get_tables(self)-> dict[LuauRW_Table]:
+    def get_tables(self) -> dict[LuauRW_Table]:
         return self.get_lua_objs(TTABLE)
 
     def get_protos(self) -> dict[LuauRW_ProtoECB]:
@@ -262,12 +266,15 @@ class LuauRobloxAnalysis(Analysis):
         return self.get_lua_objs(TTHREAD)
 
     def check_results_status(self) -> bool:
-        if self.sift_results_loaded:
+        if hasattr(self, 'sift_results_loaded') and self.sift_results_loaded:
             return True
-        elif self.load_srt and self.load_srt.is_alive():
+        elif hasattr(self, 'load_srt') and self.load_srt and self.load_srt.is_alive():
             self.log.debug(
                 "Still loading. loaded potential gcos from {} and potential structs {} results from {}".format(
                     len(self.lrss.gco_results), len(self.lrss.struct_results), self.raw_sift_results))
+            return False
+
+        if getattr(self, 'load_srt', None) and not self.sift_results_loaded:
             return False
         self.log.debug("Completed. loaded potential gcos from {} and potential structs {} results from {}".format(
             len(self.lrss.gco_results), len(self.lrss.struct_results), self.raw_sift_results))
@@ -278,7 +285,8 @@ class LuauRobloxAnalysis(Analysis):
     def is_sift_results_loaded(self) -> bool:
         return self.sift_results_loaded
 
-    def scan_lua_pages_gco(self) -> [ LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+    def scan_lua_pages_gco(self) -> [
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         lpages = self.lua_pages.get_pages()
         objs = []
         for lpage in lpages:
@@ -288,7 +296,8 @@ class LuauRobloxAnalysis(Analysis):
             objs = objs + r
         return objs
 
-    def scan_lua_page_gco(self, addr=None, lpage=None, add_object=False, printable_strings=True) -> [ LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+    def scan_lua_page_gco(self, addr=None, lpage=None, add_object=False, printable_strings=True) -> [
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         objs = []
         if addr is None and lpage is None:
             return objs
@@ -374,8 +383,26 @@ class LuauRobloxAnalysis(Analysis):
                     typ = VALID_OBJ_TYPES.get(gco.tt, "UNKNOWN")
                     self.log.debug("Found {} GCO at 0x{:08x}".format(typ, gco.addr))
         # TODO UpVal recognizer
-        return {'unreferenced_gco': new_gcos, "table": tables, "prototype": prototypes,
-                "tstring": tstrings, "closures": closures, "userdata": useer_datas, "upvals": upvals}
+        self.analysis_results = {'unreferenced_gco': new_gcos, "table": tables, "prototype": prototypes,
+                                 'lua_State': threads,
+                                 "tstring": tstrings, "closures": closures, "userdata": useer_datas, "upvals": upvals}
+        return self.analysis_results
+
+    def mark_complete(self, from_callback=False):
+        if from_callback or isinstance(self.load_srt, threading.Thread) and not self.load_srt.is_alive():
+            self.sift_results_loaded = True
+            self.load_srt = None
+            self.log.debug(
+                "Sift results loading Completed. loaded potential gcos from {} and potential structs {} results from {}".format(
+                    len(self.lrss.gco_results), len(self.lrss.struct_results), self.raw_sift_results))
+        return self.sift_results_loaded
+
+    def thread_completed(self):
+        self.log.debug("Sift results loading Completed.")
+        self.mark_complete(from_callback=True)
+        self.log.debug("Starting the analysis thread")
+        self.analysis_thread = threading.Thread(target=self.sift_results_load_complete)
+        self.analysis_thread.start()
 
     def load_sift_results(self, pointer_file=None, background=True, bulk_load=True) -> bool:
         if self.raw_sift_results is None and pointer_file is None:
@@ -389,15 +416,15 @@ class LuauRobloxAnalysis(Analysis):
 
         self.log.debug("Loading luau-sifter results from {}".format(self.raw_sift_results))
         self.lrss = LuauSifterResults()
-        kwargs = {'parse_gc_header': False, 'bulk_load': bulk_load, 'callback': self.check_results_status}
+        kwargs = {'parse_gc_header': False, 'bulk_load': bulk_load, 'callback': self.thread_completed}
         self.load_srt = Thread(target=self.lrss.parse_file, kwargs=kwargs, args=(self.raw_sift_results,))
         self.load_srt.start()
         if not background:
             self.load_srt.join()
         return self.check_results_status()
 
-
-    def get_gco_overlay(self, vaddr, ctypes_cls, buf=None, ref_addr=None, add_obj=False, caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
+    def get_gco_overlay(self, vaddr, ctypes_cls, buf=None, ref_addr=None, add_obj=False,
+                        caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
         ett = getattr(ctypes_cls, '_tt_', None)
         if ett is None or not ctypes_cls.has_gc_header() or vaddr in self.not_lua_objects[ett]:
             return None
@@ -473,7 +500,8 @@ class LuauRobloxAnalysis(Analysis):
         for v in self.not_lua_objects.values():
             v.add(addr)
 
-    def read_gco(self, vaddr, tt=None, add_obj=False, caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
+    def read_gco(self, vaddr, tt=None, add_obj=False,
+                 caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
         if tt is None:
             gco = LuauRW_GCHeader.from_analysis(vaddr, self)
             if gco is not None:
@@ -493,7 +521,8 @@ class LuauRobloxAnalysis(Analysis):
         tv = LuauRW_TValue.from_analysis(vaddr, self)
         return tv
 
-    def read_gco_ptr(self, pvaddr, tt=None, word_sz=4, little_endian=True, add_obj=False, caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
+    def read_gco_ptr(self, pvaddr, tt=None, word_sz=4, little_endian=True, add_obj=False,
+                     caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
         if tt is None:
             vaddr = self.deref_address(pvaddr, word_sz, little_endian)
             if vaddr is None:
@@ -536,7 +565,8 @@ class LuauRobloxAnalysis(Analysis):
 
         return self.get_strings_from_sifter_results()
 
-    def get_potential_objects_from_sifter(self, tt, perform_overlay=True, add_obj=False) -> list[ LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+    def get_potential_objects_from_sifter(self, tt, perform_overlay=True, add_obj=False) -> list[
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         results = []
         for o in self.lrss.get_potential_objects():
             # this is a sifter result and not an object
@@ -550,7 +580,8 @@ class LuauRobloxAnalysis(Analysis):
                     results.append(o)
         return results
 
-    def sanity_check(self, obj, add_obj=False, printable_strings=False, tables=None) -> list[ None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+    def sanity_check(self, obj, add_obj=False, printable_strings=False, tables=None) -> list[
+        None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         tables = tables if tables else list(self.get_tables().values())
         if obj.tt == TSTRING:
             return self.sanity_check_tstrings([obj], add_obj=add_obj, printable_strings=printable_strings)
@@ -577,7 +608,7 @@ class LuauRobloxAnalysis(Analysis):
             tstrings.append(obj)
             self.strings[obj.addr] = obj
             value = None if not isinstance(obj, LuauRW_TString) else obj.get_value()
-            if printable_strings and value is not None and self.printable_string(value):
+            if printable_strings and value is not None and self.is_printable_string(value):
                 self.printable_strings[obj.addr] = obj
 
         if add_obj:
@@ -588,7 +619,8 @@ class LuauRobloxAnalysis(Analysis):
             tstrings = list(self.printable_strings.values())
         return tstrings
 
-    def potentials_tstrings(self, sanity_check=False, add_obj=False, printable_strings=True, tables=None) -> list[LuauRW_TString]:
+    def potentials_tstrings(self, sanity_check=False, add_obj=False, printable_strings=True, tables=None) -> list[
+        LuauRW_TString]:
         r = self.get_potential_objects_from_sifter(TSTRING)
         if sanity_check:
             return self.sanity_check_tstrings(r, add_obj=add_obj, printable_strings=printable_strings)
@@ -626,7 +658,7 @@ class LuauRobloxAnalysis(Analysis):
                 self.add_gc_object(o.addr, o)
         return userdatas
 
-    def potentials_userdatas(self, sanity_check=False, add_obj=False, tables=None)->list[LuauRW_Udata]:
+    def potentials_userdatas(self, sanity_check=False, add_obj=False, tables=None) -> list[LuauRW_Udata]:
         r = self.get_potential_objects_from_sifter(TUSERDATA)
         if sanity_check:
             return self.sanity_check_userdatas(r, add_obj=add_obj, tables=tables)
@@ -677,7 +709,8 @@ class LuauRobloxAnalysis(Analysis):
             return self.sanity_check_tables(r, add_obj=add_obj)
         return r
 
-    def sanity_check_protos(self, protos_list, add_obj=False, check_execdata=True, tables=None) -> list[LuauRW_ProtoECB]:
+    def sanity_check_protos(self, protos_list, add_obj=False, check_execdata=True, tables=None) -> list[
+        LuauRW_ProtoECB]:
         v_k = lambda p: p.k == 0 or self.valid_vaddr(p.k)
         v_code = lambda p: p.code > 0 and self.valid_vaddr(p.code)
         v_p = lambda p: p.p == 0 or self.valid_vaddr(p.p)
@@ -707,7 +740,8 @@ class LuauRobloxAnalysis(Analysis):
                 self.add_gc_object(p.addr, p)
         return lprotos
 
-    def potentials_prototypes(self, sanity_check=False, add_obj=False, check_execdata=True, tables=None) -> list[LuauRW_ProtoECB]:
+    def potentials_prototypes(self, sanity_check=False, add_obj=False, check_execdata=True, tables=None) -> list[
+        LuauRW_ProtoECB]:
         r = self.get_potential_objects_from_sifter(TPROTO)
         if sanity_check:
             return self.sanity_check_protos(r, add_obj=add_obj, check_execdata=check_execdata, tables=tables)
@@ -764,7 +798,8 @@ class LuauRobloxAnalysis(Analysis):
     def get_memrange(self, vaddr) -> MemRange:
         return self.mem_ranges.get_memrange_from_vaddr(vaddr)
 
-    def get_objects_in_section(self, vaddr) -> list[ LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+    def get_objects_in_section(self, vaddr) -> list[
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         results = []
         mr = self.get_memrange(vaddr)
         if mr is None:
@@ -776,7 +811,8 @@ class LuauRobloxAnalysis(Analysis):
                 results.append(v)
         return results
 
-    def get_pot_objects_in_section(self, vaddr) -> list[ LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+    def get_pot_objects_in_section(self, vaddr) -> list[
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         results = []
         mr = self.get_memrange(vaddr)
         if mr is None:
@@ -802,7 +838,7 @@ class LuauRobloxAnalysis(Analysis):
                 results.append(v)
         return results
 
-    def get_srcs_in_section(self, vaddr)->list[dict]:
+    def get_srcs_in_section(self, vaddr) -> list[dict]:
         results = []
         mr = self.get_memrange(vaddr)
         if mr is None:
@@ -852,7 +888,8 @@ class LuauRobloxAnalysis(Analysis):
         self.anchor_objects.update(anchor_objects)
         return anchor_objects
 
-    def find_anchor_objects(self) -> dict[ LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+    def find_anchor_objects(self) -> dict[
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         self.anchor_objects = {}
         if not self.is_sift_results_loaded():
             self.load_sift_results()
@@ -1070,7 +1107,7 @@ class LuauRobloxAnalysis(Analysis):
                 lua_pages.append(nlp)
         return lua_pages
 
-    def walk_lua_page_freelist_forward(self, lua_page)-> list[LuauRW_lua_Page]:
+    def walk_lua_page_freelist_forward(self, lua_page) -> list[LuauRW_lua_Page]:
         # walk GCO List forward
         lua_pages = []
         self.log.debug(
@@ -1088,7 +1125,7 @@ class LuauRobloxAnalysis(Analysis):
                 lua_pages.append(nlp)
         return lua_pages
 
-    def walk_lua_page_freelist_backward(self, lua_page)-> list[LuauRW_lua_Page]:
+    def walk_lua_page_freelist_backward(self, lua_page) -> list[LuauRW_lua_Page]:
         # walk GCO List forward
         lua_pages = []
         self.log.debug(
@@ -1106,7 +1143,7 @@ class LuauRobloxAnalysis(Analysis):
                 lua_pages.append(nlp)
         return lua_pages
 
-    def walk_lua_page_gcolist_backward(self, lua_page)-> list[LuauRW_lua_Page]:
+    def walk_lua_page_gcolist_backward(self, lua_page) -> list[LuauRW_lua_Page]:
         lua_pages = []
         # walk GCO List backward
         self.log.debug(
@@ -1124,7 +1161,7 @@ class LuauRobloxAnalysis(Analysis):
                 lua_pages.append(nlp)
         return lua_pages
 
-    def walk_lua_pages(self, lua_page)-> list[LuauRW_lua_Page]:
+    def walk_lua_pages(self, lua_page) -> list[LuauRW_lua_Page]:
         '''
         walk the lua pages to find the allocations
         :param lua_page:
@@ -1162,7 +1199,8 @@ class LuauRobloxAnalysis(Analysis):
                 not_visited_pages = not_visited_pages + mp
         return list(self.lua_pages.get_pages())
 
-    def find_lua_page_header(self, start_addr=None, allowed_failures=3, stop_addr=None, block_size=32) -> LuauRW_lua_Page:
+    def find_lua_page_header(self, start_addr=None, allowed_failures=3, stop_addr=None,
+                             block_size=32) -> LuauRW_lua_Page:
         lua_page = None
         self.log.debug("Searching for lua_pages using 32-byte sizeclass page")
         if start_addr == None:
@@ -1201,7 +1239,7 @@ class LuauRobloxAnalysis(Analysis):
             pot_page_addr += 8
         return lua_page
 
-    def get_last_page_block(self, lua_page: LuauRW_lua_Page) -> None|int:
+    def get_last_page_block(self, lua_page: LuauRW_lua_Page) -> None | int:
         if lua_page is None:
             return None
 
