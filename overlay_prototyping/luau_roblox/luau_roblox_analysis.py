@@ -168,6 +168,7 @@ class LuauRobloxAnalysis(Analysis):
 
         self.lua_table_values = {}
         self.lua_pages = LuaPages()
+        self.valid_lua_gco_pages = []
 
     def read_table_values(self, ttable: LuauRW_Table, add_obj=False) -> dict[LuauRW_TValue]:
         sizearray = ttable.sizearray
@@ -289,14 +290,31 @@ class LuauRobloxAnalysis(Analysis):
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         lpages = self.lua_pages.get_pages()
         objs = []
+        checked = []
+        self.valid_lua_gco_pages = []
         for lpage in lpages:
+            # evaluate whether this lua_Page is relevant and should be searched
+            if any([i[0] < lpage.addr < i[1] for i in checked]):
+                self.log.debug("lua_Page already checked, lua_Page @ 0x{:08x} ".format(lpage.addr))
+                continue
+            elif lpage.pageSize > 0x8000 or lpage.pageSize <= 0:
+                self.log.debug("lua_Page size is incompatible with scan ({}), lua_Page @ 0x{:08x} ".format(hex(lpage.pageSize), lpage.addr))
+                continue
+            lpage_start = lpage.addr
+            lpage_end = lpage.addr + 24 + lpage.pageSize
+            checked.append([lpage_start, lpage_end])
             r = self.scan_lua_page_gco(lpage=lpage)
             if len(r) > 0:
                 self.log.debug("Found {} new objects in lua_Page @ 0x{:08x} ".format(len(r), lpage.addr))
-            objs = objs + r
+                objs = objs + r
+                self.valid_lua_gco_pages.append(lpage)
+            else:
+                self.log.debug("No objects in lua_Page @ 0x{:08x} ".format(lpage.addr))
+
+        self.valid_lua_gco_pages = sorted(self.valid_lua_gco_pages, key=lambda x: x.addr)
         return objs
 
-    def scan_lua_page_gco(self, addr=None, lpage=None, add_object=False, printable_strings=True) -> [
+    def scan_lua_page_gco(self, addr=None, lpage=None, add_object=False, printable_strings=True, incr=4) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
         objs = []
         if addr is None and lpage is None:
@@ -315,12 +333,19 @@ class LuauRobloxAnalysis(Analysis):
         padding = (lpage.addr + lpage.pageSize + lpage.freeNext) % 8
         start_addr = (lpage.addr + lpage.pageSize + lpage.freeNext) + padding
         block_size = lpage.blockSize
+        if start_addr < lpage.addr or start_addr <= 0:
+            return objs
+
         pos = 0
         end = lpage.addr + lpage.pageSize
         tables = list(self.get_tables().values())
+        self.log.debug("Scanning lua Page @ 0x{:08x} (sz={}) for GCOs".format(lpage.addr, lpage.pageSize))
         while pos + start_addr < end:
-            incr = 8
             if not self.has_gco(pos + start_addr):
+                gco = self.read_gco(pos+start_addr, caution=False)
+                if gco is None:
+                    pos += incr
+                    continue
                 r = self.sanity_check(gco, add_obj=add_object, printable_strings=printable_strings, tables=tables)
                 if isinstance(r, list) and len(r) > 0:
                     self.log.debug("Found new gco @ 0x{:08x} tt: {} ".format(start_addr + pos, gco.tt))
@@ -504,11 +529,16 @@ class LuauRobloxAnalysis(Analysis):
     def read_gco(self, vaddr, tt=None, add_obj=False,
                  caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
         if tt is None:
-            gco = LuauRW_GCHeader.from_analysis(vaddr, self)
+            gco = None
+            try:
+                gco = LuauRW_GCHeader.from_analysis(vaddr, self)
+            except:
+                if caution:
+                    raise
             if gco is not None:
                 tt = gco.tt
-            else:
-                self.bad_obj_address(vaddr)
+            # else:
+            #     self.bad_obj_address(vaddr)
 
         if tt not in VALID_OBJ_CLS_MAPPING:
             return None
@@ -1196,7 +1226,7 @@ class LuauRobloxAnalysis(Analysis):
                     continue
                 nlp = LuauRW_lua_Page.from_analysis(nla, analysis=self, safe_load=False)
                 more_pages = self.walk_lua_pages(nlp)
-                mp = [i.addr for i in more_pages if i not in already_visited]
+                mp = [i.addr for i in more_pages if i.addr not in already_visited]
                 not_visited_pages = not_visited_pages + mp
         return list(self.lua_pages.get_pages())
 
