@@ -1276,3 +1276,51 @@ class LuauRobloxAnalysis(Analysis):
 
         offset = lua_page.freeNext + lua_page.get_offset('data') + lua_page.blockSize
         return lua_page.addr + offset
+
+    def find_lua_pages_tvalues(self):
+        lua_pages = self.lua_pages.get_pages()
+        pot_gco = {}
+        pot_tval = {}
+        pot_tt = {}
+        results = {'pot_gco': pot_gco, "pot_tval": pot_tval, 'pot_tt': pot_tt}
+        for lp in lua_pages:
+            self.log.debug(
+                "Scanning lua_Page {:08x} of size: {} for tvalues".format(lp.addr, lp.pageSize))
+            x = self.find_tvalues(lp)
+            pot_gco.update(x['pot_gco'])
+            pot_tval.update(x['pot_tval'])
+            for tt in x['pot_tt'].keys():
+                if tt not in pot_tt:
+                    pot_tt[tt] = []
+                pot_tt[tt] = pot_tt[tt] + x['pot_tt'][tt]
+        return results
+
+    def find_tvalues(self, lp: LuauRW_lua_Page):
+        pot_gco = {}
+        pot_tval = {}
+        pot_tt = {}
+        results = {'pot_gco': pot_gco, "pot_tval": pot_tval, 'pot_tt': pot_tt}
+        if lp.pageSize != 0x3fe8:
+            return results
+
+        end = lp.addr + lp.get_offset('data')
+        # skip to the end of the page
+        vaddr = end + lp.pageSize - ctypes.sizeof(LuauRW_TValue)
+        incr = - self.word_sz
+        while end <= vaddr:
+            tval = LuauRW_TValue.from_analysis(vaddr, self, safe_load=False)
+            if tval.tt not in LUA_TAG_TYPES:
+                vaddr += incr
+                continue
+            if tval.tt not in pot_tt:
+                pot_tt[tval.tt] = []
+            pot_tt[tval.tt].append(tval)
+            if tval.tt in VALID_OBJ_TYPES and self.valid_vaddr(tval.value.gc):
+                gco = self.get_gco(tval.value.gc)
+                if gco is not None:
+                    pot_gco[tval.value.gc] = gco
+                    pot_tval[vaddr] = tval
+            vaddr += incr
+        self.log.debug(
+            "lua_Page {:08x} of size: {} found {} tvalues and {} gcos".format(lp.addr, lp.pageSize, len(pot_tval), len(pot_gco)))
+        return results

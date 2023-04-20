@@ -352,8 +352,6 @@ class Analysis(object):
         if load_memory_data:
             self.load_memory()
 
-
-
     def load_memory(self):
         if self.fh is None:
             raise Exception("Unable to load memory, no opened file")
