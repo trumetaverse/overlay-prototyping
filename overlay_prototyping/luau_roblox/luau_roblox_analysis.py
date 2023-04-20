@@ -1277,7 +1277,7 @@ class LuauRobloxAnalysis(Analysis):
         offset = lua_page.freeNext + lua_page.get_offset('data') + lua_page.blockSize
         return lua_page.addr + offset
 
-    def find_lua_pages_tvalues(self):
+    def find_tvalues_in_lua_pages(self):
         lua_pages = self.lua_pages.get_pages()
         pot_gco = {}
         pot_tval = {}
@@ -1295,10 +1295,10 @@ class LuauRobloxAnalysis(Analysis):
                 pot_tt[tt] = pot_tt[tt] + x['pot_tt'][tt]
         return results
 
-    def find_tvalues(self, lp: LuauRW_lua_Page):
+    def find_tvalues_in_lua_page(self, lp: LuauRW_lua_Page):
         pot_gco = {}
         pot_tval = {}
-        pot_tt = {}
+        pot_tt = {k:[] for k in LUA_TAG_TYPES}
         results = {'pot_gco': pot_gco, "pot_tval": pot_tval, 'pot_tt': pot_tt}
         if lp.pageSize != 0x3fe8:
             return results
@@ -1307,16 +1307,18 @@ class LuauRobloxAnalysis(Analysis):
         # skip to the end of the page
         vaddr = end + lp.pageSize - ctypes.sizeof(LuauRW_TValue)
         incr = - self.word_sz
+        tt_offset = LuauRW_TValue.get_offset("tt")
         while end <= vaddr:
-            tval = LuauRW_TValue.from_analysis(vaddr, self, safe_load=False)
-            if tval.tt not in LUA_TAG_TYPES:
+            tt = self.read_uint(vaddr+12)
+            gc_addr = self.read_uint(vaddr)
+            if tt not in LUA_TAG_TYPES:
                 vaddr += incr
                 continue
-            if tval.tt not in pot_tt:
-                pot_tt[tval.tt] = []
+
+            tval = LuauRW_TValue.from_analysis(vaddr, self, safe_load=False)
             pot_tt[tval.tt].append(tval)
             if tval.tt in VALID_OBJ_TYPES and self.valid_vaddr(tval.value.gc):
-                gco = self.get_gco(tval.value.gc)
+                gco = self.read_gco(tval.value.gc)
                 if gco is not None:
                     pot_gco[tval.value.gc] = gco
                     pot_tval[vaddr] = tval
