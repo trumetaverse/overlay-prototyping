@@ -44,9 +44,12 @@ class LuaPage(object):
         self.size = self.end = self.addr
         self.objects = {}
 
+    def has_object(self):
+        return self.objects > 0
+
     def is_gco_page(self) -> bool:
         lpage = self.lpage
-        return lpage.blockSize == lpage.pageSize
+        return len(self.objects) > 0 or lpage.blockSize == lpage.pageSize or 16360 == lpage.pageSize
 
     def addr_in(self, addr) -> bool:
         return self.addr <= addr < self.addr + self.size
@@ -64,10 +67,36 @@ class LuaPage(object):
         lpage = self.lpage
         return lpage.addr + lpage.pageSize + lpage.freeNext
 
+    def add_obj(self, obj):
+        self.objects[obj.addr] = obj
+
+    def add_tvalue(self, tvalue):
+        self.objects[tvalue.addr] = tvalue
+
 
 class LuaPages(object):
     def __init__(self):
         self.lpages = {}
+
+    def add_obj(self, obj):
+        vaddr = obj.addr if obj else None
+        if vaddr is None:
+            return False
+        lp = self.get_page_with_addr(vaddr)
+        if lp:
+            lp.add_obj(obj)
+            return True
+        return False
+
+    def add_tvalue(self, tvalue):
+        vaddr = tvalue.addr if tvalue else None
+        if vaddr is None:
+            return False
+        lp = self.get_page_with_addr(vaddr)
+        if lp:
+            lp.add_tvalue(tvalue)
+            return True
+        return False
 
     def addr_in(self, addr) -> bool:
         for v in self.lpages.values():
@@ -85,6 +114,12 @@ class LuaPages(object):
         for v in self.lpages.values():
             if v.addr_in(addr):
                 return v.lpage
+        return None
+
+    def get_page_abstraction_with_addr(self, addr) -> LuaPage | None:
+        for v in self.lpages.values():
+            if v.addr_in(addr):
+                return v
         return None
 
     def get_page_with_obj(self, obj) -> LuauRW_lua_Page | None:
@@ -180,6 +215,12 @@ class LuauRobloxAnalysis(Analysis):
             if add_obj:
                 self.add_struct_object(tva, tvalue)
         return tvalues
+
+    def add_gco_to_luapage(self, obj):
+        return self.lua_pages.add_obj(obj)
+
+    def add_tvalue_to_luapage(self, tvalue):
+        return self.lua_pages.add_tvalue(tvalue)
 
     def add_gc_object(self, addr, obj, ref_addr=None):
         if obj is None:
@@ -298,7 +339,9 @@ class LuauRobloxAnalysis(Analysis):
                 self.log.debug("lua_Page already checked, lua_Page @ 0x{:08x} ".format(lpage.addr))
                 continue
             elif lpage.pageSize > 0x8000 or lpage.pageSize <= 0:
-                self.log.debug("lua_Page size is incompatible with scan ({}), lua_Page @ 0x{:08x} ".format(hex(lpage.pageSize), lpage.addr))
+                self.log.debug(
+                    "lua_Page size is incompatible with scan ({}), lua_Page @ 0x{:08x} ".format(hex(lpage.pageSize),
+                                                                                                lpage.addr))
                 continue
             lpage_start = lpage.addr
             lpage_end = lpage.addr + 24 + lpage.pageSize
@@ -342,7 +385,7 @@ class LuauRobloxAnalysis(Analysis):
         self.log.debug("Scanning lua Page @ 0x{:08x} (sz={}) for GCOs".format(lpage.addr, lpage.pageSize))
         while pos + start_addr < end:
             if not self.has_gco(pos + start_addr):
-                gco = self.read_gco(pos+start_addr, caution=False)
+                gco = self.read_gco(pos + start_addr, caution=False)
                 if gco is None:
                     pos += incr
                     continue
@@ -1286,7 +1329,7 @@ class LuauRobloxAnalysis(Analysis):
         for lp in lua_pages:
             self.log.debug(
                 "Scanning lua_Page {:08x} of size: {} for tvalues".format(lp.addr, lp.pageSize))
-            x = self.find_tvalues(lp)
+            x = self.find_tvalues_in_lua_page(lp)
             pot_gco.update(x['pot_gco'])
             pot_tval.update(x['pot_tval'])
             for tt in x['pot_tt'].keys():
@@ -1298,7 +1341,7 @@ class LuauRobloxAnalysis(Analysis):
     def find_tvalues_in_lua_page(self, lp: LuauRW_lua_Page):
         pot_gco = {}
         pot_tval = {}
-        pot_tt = {k:[] for k in LUA_TAG_TYPES}
+        pot_tt = {k: [] for k in LUA_TAG_TYPES}
         results = {'pot_gco': pot_gco, "pot_tval": pot_tval, 'pot_tt': pot_tt}
         if lp.pageSize != 0x3fe8:
             return results
@@ -1308,21 +1351,29 @@ class LuauRobloxAnalysis(Analysis):
         vaddr = end + lp.pageSize - ctypes.sizeof(LuauRW_TValue)
         incr = - self.word_sz
         tt_offset = LuauRW_TValue.get_offset("tt")
+        a_lp = self.lua_pages.get_page_abstraction_with_addr(lp.addr)
+        if a_lp is None:
+            self.log.debug("Unable to associate the gcos and tvalues with with a lua_Page ".format())
+
         while end <= vaddr:
-            tt = self.read_uint(vaddr+12)
+            tt = self.read_uint(vaddr + 12)
             gc_addr = self.read_uint(vaddr)
             if tt not in LUA_TAG_TYPES:
                 vaddr += incr
                 continue
 
-            tval = LuauRW_TValue.from_analysis(vaddr, self, safe_load=False)
-            pot_tt[tval.tt].append(tval)
-            if tval.tt in VALID_OBJ_TYPES and self.valid_vaddr(tval.value.gc):
-                gco = self.read_gco(tval.value.gc)
+            tvalue = LuauRW_TValue.from_analysis(vaddr, self, safe_load=False)
+            pot_tt[tvalue.tt].append(tvalue)
+            if tvalue.tt in VALID_OBJ_TYPES and self.valid_vaddr(tvalue.value.gc):
+                gco = self.read_gco(tvalue.value.gc)
                 if gco is not None:
-                    pot_gco[tval.value.gc] = gco
-                    pot_tval[vaddr] = tval
+                    if a_lp is not None:
+                        a_lp.add_obj(gco)
+                        a_lp.add_tvalue(tvalue)
+                    pot_gco[tvalue.value.gc] = gco
+                    pot_tval[vaddr] = tvalue
             vaddr += incr
         self.log.debug(
-            "lua_Page {:08x} of size: {} found {} tvalues and {} gcos".format(lp.addr, lp.pageSize, len(pot_tval), len(pot_gco)))
+            "lua_Page {:08x} of size: {} found {} tvalues and {} gcos".format(lp.addr, lp.pageSize, len(pot_tval),
+                                                                              len(pot_gco)))
         return results
