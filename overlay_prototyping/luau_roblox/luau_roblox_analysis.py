@@ -2,6 +2,7 @@ import ctypes
 import json
 import string
 import threading
+import time
 from threading import Thread
 from concurrent.futures import ProcessPoolExecutor
 
@@ -10,7 +11,7 @@ from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
 # from .luau_roblox_base import LuauRobloxBase
 from .overlay_base import LuauRW_BaseStruct, LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Table, \
     LuauRW_UpVal, LuauRW_Closure, VALID_OBJ_CLS_MAPPING, LuauRW_GCHeader, LuauRW_TValue, LuauRW_global_State, \
-    LuauRW_lua_Page, LuauRW_ProtoECB
+    LuauRW_lua_Page, LuauRW_ProtoECB, LuauRW_Proto
 from ..analysis import Analysis, MemRange
 from ..base import BaseException
 
@@ -227,6 +228,7 @@ class LuauRobloxAnalysis(Analysis):
         self.lua_table_values = {}
         self.lua_pages = LuaPages()
         self.valid_lua_gco_pages = []
+        self.lrss = LuauSifterResults()
 
     def read_table_values(self, ttable: LuauRW_Table, add_obj=False) -> dict[LuauRW_TValue]:
         sizearray = ttable.sizearray
@@ -508,7 +510,7 @@ class LuauRobloxAnalysis(Analysis):
             self.raw_sift_results = pointer_file
 
         self.log.debug("Loading luau-sifter results from {}".format(self.raw_sift_results))
-        self.lrss = LuauSifterResults()
+
         kwargs = {'parse_gc_header': False, 'bulk_load': bulk_load, 'callback': self.thread_completed}
         self.load_srt = Thread(target=self.lrss.parse_file, kwargs=kwargs, args=(self.raw_sift_results,))
         self.load_srt.start()
@@ -1009,6 +1011,15 @@ class LuauRobloxAnalysis(Analysis):
                 pstrings.append(obj)
         return pstrings
 
+    def get_printable_strings(self):
+        strings = self.get_strings()
+        for addr, tstring in strings.items():
+            if tstring is None or tstring.get_value() is None:
+                continue
+            if addr not in self.printable_strings and self.is_printable_string(tstring.get_value()):
+                self.printable_strings[addr] = tstring
+        return self.printable_strings
+
     def is_printable_string(self, value) -> bool:
         return value is not None and all([i in string.printable for i in value])
 
@@ -1112,7 +1123,7 @@ class LuauRobloxAnalysis(Analysis):
             if gco is None:
                 failed += -1
                 _next_addr = next_addr + 8 if next_addr % 8 == 0 else next_addr + (next_addr % 8)
-                print("Failed at 0x{:08x}, advancing to 0x{:08x}".format(next_addr, _next_addr))
+                analysis.log.error("Failed at 0x{:08x}, advancing to 0x{:08x}".format(next_addr, _next_addr))
                 next_addr = _next_addr
                 continue
             else:
@@ -1154,7 +1165,7 @@ class LuauRobloxAnalysis(Analysis):
                 failed += -1
                 _next_addr = next_addr - 8
                 failures.append(next_addr)
-                print("Failed at 0x{:08x}, advancing to 0x{:08x}".format(next_addr, _next_addr))
+                self.log.error("Failed at 0x{:08x}, advancing to 0x{:08x}".format(next_addr, _next_addr))
                 next_addr = _next_addr
                 continue
             else:
@@ -1350,9 +1361,28 @@ class LuauRobloxAnalysis(Analysis):
         pot_tval = {} if pot_tval is None else pot_tval
         pot_tt = {k: [] for k in LUA_TAG_TYPES} if pot_tt is None else pot_tt
         results = {'pot_gco': pot_gco, "pot_tval": pot_tval, 'pot_tt': pot_tt}
-
+        num_lps = len(lua_pages)
+        cnt = 0
         if isinstance(num_threads, int):
-            pass
+            active_threads = []
+            while len(lua_pages) > 0:
+                lp = lua_pages.pop(0)
+                cnt += 1
+                self.log.debug("Processing {} of {} lua_Pages ".format(cnt, num_lps))
+                t = Thread(target=self.find_tvalues_in_lua_page,
+                           args=(lp,),
+                           kwargs={'pot_gco': pot_gco, 'pot_tval': pot_tval, 'pot_tt':pot_tt, 'add_obj': add_obj})
+                t.start()
+                active_threads.append(t)
+                active_threads = [i for i in active_threads if i.is_alive()]
+                while len(active_threads) > num_threads:
+                    time.sleep(1.0)
+                    active_threads = [i for i in active_threads if i.is_alive()]
+
+            while len(active_threads) > 0:
+                time.sleep(1.0)
+                active_threads = [i for i in active_threads if i.is_alive()]
+
             # try:
             #     futures = []
             #     with ProcessPoolExecutor(max_workers=num_threads) as executor:
@@ -1409,9 +1439,9 @@ class LuauRobloxAnalysis(Analysis):
                 continue
 
             tvalue = LuauRW_TValue.from_analysis(vaddr, self, safe_load=False)
-            pot_tt[tvalue.tt].append(tvalue)
-            if a_lp is not None:
-                a_lp.add_tvalue(tvalue)
+            # pot_tt[tvalue.tt].append(tvalue)
+            # if a_lp is not None:
+            #     a_lp.add_tvalue(tvalue)
             if tvalue.tt in VALID_OBJ_TYPES and self.valid_vaddr(tvalue.value.gc):
                 gco = self.read_gco(tvalue.value.gc)
                 if gco is not None:
@@ -1549,7 +1579,7 @@ class LuauRobloxAnalysis(Analysis):
                         self.lua_pages.add_page(lco, walk_pages=False)
                     elif not is_tval:
                         self.add_struct_object(addr, lco)
-                        tvals.append(tvals)
+                        tvals.append(lco)
                     else:
                         self.add_struct_object(addr, lco)
 
