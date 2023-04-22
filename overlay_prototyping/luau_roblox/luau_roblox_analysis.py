@@ -1,7 +1,9 @@
 import ctypes
+import json
 import string
 import threading
 from threading import Thread
+from concurrent.futures import ProcessPoolExecutor
 
 from .consts import *
 from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
@@ -103,7 +105,8 @@ class LuaPages(object):
             return False
         lp = self.get_page_with_addr(vaddr)
         if lp:
-            lp.add_obj(obj)
+            luapage = self.lpages[lp.addr]
+            luapage.add_obj(obj)
             return True
         return False
 
@@ -152,7 +155,7 @@ class LuaPages(object):
         if isinstance(lpage, LuauRW_lua_Page) and lpage.addr not in self.lpages:
             lp = LuaPage(lpage)
             self.lpages[lpage.addr] = lp
-            self.add_to_pbs(lp)
+            self.add_to_pbs(lpage)
             return True
         return False
 
@@ -414,6 +417,7 @@ class LuauRobloxAnalysis(Analysis):
                     self.log.debug("Found new gco @ 0x{:08x} tt: {} ".format(start_addr + pos, gco.tt))
                     incr = gco.get_total_size()
                     objs.append(gco)
+                    self.lua_pages.add_obj(gco)
                     if isinstance(gco, LuauRW_Table):
                         tables.append(gco)
             else:
@@ -1340,28 +1344,50 @@ class LuauRobloxAnalysis(Analysis):
         offset = lua_page.freeNext + lua_page.get_offset('data') + lua_page.blockSize
         return lua_page.addr + offset
 
-    def find_tvalues_in_lua_pages(self, add_obj=False):
+    def find_tvalues_in_lua_pages(self, add_obj=False, num_threads=None, pot_gco=None, pot_tval=None, pot_tt=None):
         lua_pages = self.lua_pages.get_pages()
-        pot_gco = {}
-        pot_tval = {}
-        pot_tt = {}
+        pot_gco = {} if pot_gco is None else pot_gco
+        pot_tval = {} if pot_tval is None else pot_tval
+        pot_tt = {k: [] for k in LUA_TAG_TYPES} if pot_tt is None else pot_tt
         results = {'pot_gco': pot_gco, "pot_tval": pot_tval, 'pot_tt': pot_tt}
-        for lp in lua_pages:
-            self.log.debug(
-                "Scanning lua_Page {:08x} of size: {} for tvalues".format(lp.addr, lp.pageSize))
-            x = self.find_tvalues_in_lua_page(lp)
-            pot_gco.update(x['pot_gco'])
-            pot_tval.update(x['pot_tval'])
-            for tt in x['pot_tt'].keys():
-                if tt not in pot_tt:
-                    pot_tt[tt] = []
-                pot_tt[tt] = pot_tt[tt] + x['pot_tt'][tt]
+
+        if isinstance(num_threads, int):
+            pass
+            # try:
+            #     futures = []
+            #     with ProcessPoolExecutor(max_workers=num_threads) as executor:
+            #         # iterate over lua pages and execute tvalue scan
+            #         for lp in lua_pages:
+            #             f = executor.submit(self.find_tvalues_in_lua_page, args=(lp,))
+            #             futures.append(f)
+            #
+            #         # iterate over lua pages and execute tvalue scan
+            #         for x in futures:
+            #             pot_gco.update(x['pot_gco'])
+            #             pot_tval.update(x['pot_tval'])
+            #             for tt in x['pot_tt'].keys():
+            #                 if tt not in pot_tt:
+            #                     pot_tt[tt] = []
+            #                 pot_tt[tt] = pot_tt[tt] + x['pot_tt'][tt]
+            # except:
+            #    raise
+        if True:
+            for lp in lua_pages:
+                self.log.debug(
+                    "Scanning lua_Page {:08x} of size: {} for tvalues".format(lp.addr, lp.pageSize))
+                x = self.find_tvalues_in_lua_page(lp, add_obj=add_obj)
+                pot_gco.update(x['pot_gco'])
+                pot_tval.update(x['pot_tval'])
+                for tt in x['pot_tt'].keys():
+                    if tt not in pot_tt:
+                        pot_tt[tt] = []
+                    pot_tt[tt] = pot_tt[tt] + x['pot_tt'][tt]
         return results
 
-    def find_tvalues_in_lua_page(self, lp: LuauRW_lua_Page, add_obj=False):
-        pot_gco = {}
-        pot_tval = {}
-        pot_tt = {k: [] for k in LUA_TAG_TYPES}
+    def find_tvalues_in_lua_page(self, lp: LuauRW_lua_Page, add_obj=False, pot_gco=None, pot_tval=None, pot_tt=None):
+        pot_gco = {} if pot_gco is None else pot_gco
+        pot_tval = {} if pot_tval is None else pot_tval
+        pot_tt = {k: [] for k in LUA_TAG_TYPES} if pot_tt is None else pot_tt
         results = {'pot_gco': pot_gco, "pot_tval": pot_tval, 'pot_tt': pot_tt}
         if lp.pageSize != 0x3fe8:
             return results
@@ -1384,12 +1410,13 @@ class LuauRobloxAnalysis(Analysis):
 
             tvalue = LuauRW_TValue.from_analysis(vaddr, self, safe_load=False)
             pot_tt[tvalue.tt].append(tvalue)
+            if a_lp is not None:
+                a_lp.add_tvalue(tvalue)
             if tvalue.tt in VALID_OBJ_TYPES and self.valid_vaddr(tvalue.value.gc):
                 gco = self.read_gco(tvalue.value.gc)
                 if gco is not None:
                     if a_lp is not None:
                         a_lp.add_obj(gco)
-                        a_lp.add_tvalue(tvalue)
                     pot_gco[tvalue.value.gc] = gco
                     pot_tval[vaddr] = tvalue
                     if add_obj:
@@ -1399,3 +1426,151 @@ class LuauRobloxAnalysis(Analysis):
             "lua_Page {:08x} of size: {} found {} tvalues and {} gcos".format(lp.addr, lp.pageSize, len(pot_tval),
                                                                               len(pot_gco)))
         return results
+
+    def get_state(self):
+        results = []
+        addrs = set()
+
+        # add discovered lps and gcos
+        for lua_page in self.lua_pages.get_pages():
+            lp_addr = lua_page.addr
+            t = {'type': "LuauRW_lua_Page", "addr": lp_addr}
+            addrs.add(lp_addr)
+            _luapage = self.lua_pages.lpages[lp_addr]
+            _gcos = [{'type':"{}".format(gco.__class__.__name__), 'addr':gco.addr} for gco in _luapage.objects.values() if gco]
+            gcos = [i for i in _gcos if i['addr'] not in addrs]
+            addrs |= {i['addr'] for i in gcos}
+            # _gcos = [{'type':"{}".format(gco.__class__.__name__), 'addr':gco.addr } for gco in _luapage.tvalues.values() if gco]
+            # gcos = [i for i in _gcos if i['addr'] not in addrs]
+            # addrs |= {i['addr'] for i in gcos}
+
+            results = results + [t] + gcos
+        # add discovered gcos
+        for tt in self.lua_gco:
+            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr} for gco in self.lua_gco[tt].items() if gco]
+            gcos = [i for i in _gcos if i['addr'] not in addrs]
+            addrs |= {i['addr'] for i in gcos}
+            results = results + gcos
+
+        # add other lua structures
+        references = self.object_references.get_objects_and_references()
+        for addr in references:
+            gco = references[addr]['object']
+            refs = references[addr]['references']
+            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'references': sorted(refs)}
+            addrs.add(addr)
+            results = results + [gco_i]
+
+        references = self.struct_references.get_objects_and_references()
+        for addr in references:
+            gco = references[addr]['object']
+            refs = references[addr]['references']
+            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'references': sorted(refs)}
+            addrs.add(addr)
+            results = results + [gco_i]
+
+        return results
+
+    def get_state_with_values(self):
+        results = []
+        addrs = set()
+
+        # add discovered lps and gcos
+        for lua_page in self.lua_pages.get_pages():
+            lp_addr = lua_page.addr
+            t = {'type': "LuauRW_lua_Page", "addr": lp_addr}
+            addrs.add(lp_addr)
+            _luapage = self.lua_pages.lpages[lp_addr]
+            _gcos = [{'type':"{}".format(gco.__class__.__name__), 'addr':gco.addr, 'value': gco.get_value() } for gco in _luapage.objects.values() if gco]
+            gcos = [i for i in _gcos if i['addr'] not in addrs]
+            addrs |= {i['addr'] for i in gcos}
+            # _gcos = [{'type':"{}".format(gco.__class__.__name__), 'addr':gco.addr } for gco in _luapage.tvalues.values() if gco]
+            # gcos = [i for i in _gcos if i['addr'] not in addrs]
+            # addrs |= {i['addr'] for i in gcos}
+
+            results = results + [t] + gcos
+        # add discovered gcos
+        for tt in self.lua_gco:
+            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'value': gco.get_value()} for gco in self.lua_gco[tt].items() if gco]
+            gcos = [i for i in _gcos if i['addr'] not in addrs]
+            addrs |= {i['addr'] for i in gcos}
+            results = results + gcos
+
+        # add other lua structures
+        references = self.object_references.get_objects_and_references()
+        for addr in references:
+            gco = references[addr]['object']
+            refs = references[addr]['references']
+            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'references': sorted(refs)}
+            addrs.add(addr)
+            results = results + [gco_i]
+
+        references = self.struct_references.get_objects_and_references()
+        for addr in references:
+            gco = references[addr]['object']
+            refs = references[addr]['references']
+            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'references': sorted(refs)}
+            addrs.add(addr)
+            results = results + [gco_i]
+
+        return results
+
+    def save_state(self, outputfile):
+        self.log.debug("Obtaining all relevant objects, structures, and references")
+        results = self.get_state()
+        fmt = "{}\n"
+        self.log.debug("Writing state to {}".format(outputfile))
+        with open(outputfile, 'w') as outfile:
+            for line in results:
+                outfile.write(fmt.format(json.dumps(line)))
+        self.log.debug("Completed writing state to {}".format(outputfile))
+        return results
+
+    def restore_state(self, inputfile):
+        hold_references = []
+        added_addrs = set()
+        tvals = []
+        gcos = {}
+        with open(inputfile, 'r') as infile:
+            lines = [i.strip() for i in infile.readlines()]
+            for line in lines:
+                d = json.loads(line)
+                addr = d['addr']
+                ecls = eval(d['type'])
+                is_tval = d['type'].find('LuauRW_TValue') != -1
+                is_lua_page = d['type'].find('LuauRW_lua_Page') != -1
+                if hasattr(ecls, 'from_analysis'):
+                    lco = ecls.from_analysis(addr, self)
+                    if lco.is_gco():
+                        self.add_gc_object(addr, lco)
+                        gcos[lco.addr] = lco
+                    elif not is_lua_page:
+                        self.add_struct_object(addr, lco)
+                        self.lua_pages.add_page(lco, walk_pages=False)
+                    elif not is_tval:
+                        self.add_struct_object(addr, lco)
+                        tvals.append(tvals)
+                    else:
+                        self.add_struct_object(addr, lco)
+
+                    added_addrs.add(d['addr'])
+
+                if 'references' in d and d['addr'] in added_addrs:
+                    hold_references.append(d)
+
+            self.log.debug("Updating lua pages with {} tvalues".format(len(tvals)))
+            for tval in tvals:
+                self.lua_pages.add_tvalue(tval)
+
+            self.log.debug("Updating lua pages with {} objects".format(len(gcos)))
+            for gco in gcos.values():
+                self.lua_pages.add_obj(gco)
+
+            self.log.debug("Updating lua pages with {} object references".format(len(hold_references)))
+            for refs_line in hold_references:
+                addr = refs_line['addr']
+                for raddr in refs_line['references']:
+                    self.add_gco_reference(addr, raddr)
+
+            self.log.debug("Completed loading state from {}".format(inputfile))
+        return True

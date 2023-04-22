@@ -289,6 +289,12 @@ class ObjectReferences(object):
             self.objects[obj.addr] = obj
             self.references[obj.addr] = ObjectReference(obj)
 
+    def get_objects_and_references(self):
+        results = {}
+        for addr in self.objects:
+            results[addr] = {'object': self.objects[addr], 'references': list(self.references[addr].get_references())}
+        return results
+
     def is_valid_object(self, obj):
         return obj is not None and hasattr(obj, 'addr')
 
