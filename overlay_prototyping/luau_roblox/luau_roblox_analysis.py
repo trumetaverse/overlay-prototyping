@@ -1477,7 +1477,7 @@ class LuauRobloxAnalysis(Analysis):
             results = results + [t] + gcos
         # add discovered gcos
         for tt in self.lua_gco:
-            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr} for gco in self.lua_gco[tt].items() if gco]
+            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr} for gco in self.lua_gco[tt].values() if gco]
             gcos = [i for i in _gcos if i['addr'] not in addrs]
             addrs |= {i['addr'] for i in gcos}
             results = results + gcos
@@ -1521,7 +1521,7 @@ class LuauRobloxAnalysis(Analysis):
             results = results + [t] + gcos
         # add discovered gcos
         for tt in self.lua_gco:
-            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'value': gco.get_value()} for gco in self.lua_gco[tt].items() if gco]
+            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'value': gco.get_value()} for gco in self.lua_gco[tt].values() if gco]
             gcos = [i for i in _gcos if i['addr'] not in addrs]
             addrs |= {i['addr'] for i in gcos}
             results = results + gcos
