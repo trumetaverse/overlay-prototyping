@@ -1,89 +1,13 @@
 import json
 
 from .consts import *
-from .luau_roblox_base import LuauRobloxBase
+from .overlay_base import LuauRW_GCHeader
 
 LUAR_FILTERS = {
     "addr_is_lua_object": lambda lsr: lsr.sink_vaddr % 8 == 0,
     # "value_is_lua_object": lambda lsr: lsr.sink_value is not None and lsr.sink_value % 8 == 0,
 }
 
-
-class LuauSifterResults(object):
-    def __init__(self):
-        self.srcs = {}
-        self.obj_references = {}
-        self.pot_objects = {}
-        self.distinct_values = {}
-        self.potential_gcheaders = {}
-        self.densities = {}
-        self.results = {}
-        self.pot_closures = {}
-        self.pot_upvals = {}
-        self.pot_userdata = {}
-        self.pot_strings = {}
-        self.pot_tables = {}
-        self.pot_prototype = {}
-        self.unknown = {}
-        self.tag_objects = {
-            TSTRING: self.pot_strings,
-            TTABLE: self.pot_tables,
-            TUPVAL: self.pot_upvals,
-            TUSERDATA: self.pot_userdata,
-            TPROTO: self.pot_prototype,
-            TCLOSURE: self.pot_closures,
-        }
-
-    def add_sifter_result(self, r):
-        self.results[r.vaddr] = r
-        if r.is_valid_gc_header() and r.tt in self.tag_objects and r.marked in VALID_MARKS:
-            self.pot_objects[r.sink_vaddr] = r
-            self.tag_objects[r.tt][r.sink_vaddr] = r
-            if r.sink_vaddr not in self.obj_references:
-                self.obj_references[r.sink_vaddr] = set()
-
-            self.obj_references[r.sink_vaddr].add(r.vaddr)
-            if r.sink_vaddr_base not in self.densities:
-                self.densities[r.sink_vaddr_base] = set()
-            self.densities[r.sink_vaddr_base].add(r.sink_vaddr)
-
-        else:
-            self.unknown[r.sink_vaddr] = r
-
-        if r.sink_value not in self.distinct_values:
-            self.distinct_values[r.sink_value] = 0
-        self.distinct_values[r.sink_value] += 1
-
-        if r.sink_vaddr not in self.srcs:
-            self.srcs[r.sink_vaddr] = []
-
-        self.srcs[r.sink_vaddr].append({'vaddr': r.vaddr, 'paddr': r.paddr})
-
-    def get_potential_objects(self):
-        return list(self.pot_objects.values())
-
-    def parse_line(self, line, parse_gc_header=False):
-        r = LuauSifterResult.from_line(line, parse_gc_header=parse_gc_header)
-        if r.potential_lua_object():
-            self.add_sifter_result(r)
-        return r
-
-    def parse_file(self, filename, parse_gc_header=False, bulk_load=True):
-        fh = open(filename)
-        if bulk_load:
-            data = fh.readlines()
-            for line in data:
-                self.parse_line(line, parse_gc_header=parse_gc_header)
-        else:
-            cnt = 0
-            for line in fh:
-                self.parse_line(line, parse_gc_header=parse_gc_header)
-                cnt += 1
-
-    def get_potential_tstrings(self):
-        pot_objects = list(self.pot_objects.values())
-        return sorted([i for i in pot_objects if i.tt == TSTRING and i.marked in VALID_MARKS],
-                      key=lambda u: u.sink_vaddr)
 
 
 class LuauSifterResult(object):
@@ -94,7 +18,7 @@ class LuauSifterResult(object):
                   "sink_value", "sink_paddr_base", "sink_vaddr_base", "vaddr_base", "paddr_base"
                   ]
 
-    def __init__(self, parse_gc_header=False, **kargs):
+    def __init__(self, **kargs):
         self.paddr = 0
         self.vaddr = 0
         self.paddr_base = 0
@@ -124,24 +48,23 @@ class LuauSifterResult(object):
             self.memcat = (self.sink_value & 0x00ff0000) >> 16
             self.padding = (self.sink_value & 0xff000000) >> 24
 
-        if isinstance(self.sink_value, int) and parse_gc_header:
-            self.gcheader = LuauRobloxBase.from_int(self.sink_vaddr, self.sink_value)
-
-    def is_valid_gc_header(self):
+    def is_valid_gc_header(self) -> bool:
         return self.tt in VALID_OBJ_TYPES and self.marked in VALID_MARKS and self.padding == 0
 
-    def valid_gcheader(self):
+    def valid_gcheader(self) -> bool:
         # return self.gcheader is not None and self.gcheader.is_valid_gc_header()
         return self.is_valid_gc_header()
 
     @classmethod
     def from_line(cls, line, parse_gc_header=False):
         r = json.loads(line)
-        return cls(parse_gc_header=parse_gc_header, **r)
+        return cls(**r)
 
     def potential_lua_object(self):
         # return all(v(self) for v in self.)
-        if self.tt == TSTRING and self.sink_vaddr % 8 != 0:
+        # if self.tt == TSTRING and self.sink_vaddr % 8 != 0:
+        # hold this constraint for all objects
+        if self.sink_vaddr % 8 != 0:
             return False
         return self.is_valid_gc_header()
 
@@ -150,3 +73,112 @@ class LuauSifterResult(object):
 
     def __repr__(self):
         return str(self)
+
+class LuauSifterResults(object):
+    def __init__(self):
+        self.gco_srcs = {}
+        self.obj_references = {}
+        self.all_pot_gco = {}
+        self.potential_gcheaders = {}
+        self.densities_gco = {}
+        self.gco_results = {}
+        self.unknown_gcos = {}
+        self.struct_srcs = {}
+        self.struct_results = {}
+
+        self.pot_lua_gco = {
+            k: {} for k in VALID_OBJ_TYPES
+        }
+
+
+    def add_pot_gco_sifter_result(self, r):
+        self.gco_results[r.vaddr] = r
+        if r.is_valid_gc_header():
+            self.all_pot_gco[r.sink_vaddr] = r
+            self.pot_lua_gco[r.tt][r.sink_vaddr] = r
+            if r.sink_vaddr not in self.obj_references:
+                self.obj_references[r.sink_vaddr] = set()
+
+            self.obj_references[r.sink_vaddr].add(r.vaddr)
+            if r.sink_vaddr_base not in self.densities_gco:
+                self.densities_gco[r.sink_vaddr_base] = set()
+            self.densities_gco[r.sink_vaddr_base].add(r.sink_vaddr)
+
+        else:
+            self.unknown_gcos[r.sink_vaddr] = r
+
+        if r.sink_vaddr not in self.gco_srcs:
+            self.gco_srcs[r.sink_vaddr] = []
+
+        self.gco_srcs[r.sink_vaddr].append({'vaddr': r.vaddr, 'paddr': r.paddr})
+
+    def add_pot_structure_sifter_result(self, r):
+        self.struct_results[r.vaddr] = r
+        if r.sink_vaddr not in self.struct_srcs:
+            self.struct_srcs[r.sink_vaddr] = []
+        self.struct_srcs[r.sink_vaddr].append({'vaddr': r.vaddr, 'paddr': r.paddr})
+
+    def get_lua_objs(self, tt=None) -> dict[int, LuauSifterResult]:
+        tts = []
+        if tt is None:
+            tts = list(self.pot_lua_gco.keys())
+
+        else:
+            tts = [tt]
+        r = {}
+        for tt in tts:
+            r.update({k:v for k,v in self.pot_lua_gco[tt].itemes()})
+        return r
+
+    def get_strings(self) -> dict[int, LuauSifterResult]:
+        return self.get_lua_objs(TSTRING)
+
+    def get_udatas(self) -> dict[int, LuauSifterResult]:
+        return self.get_lua_objs(TUSERDATA)
+
+    def get_closures(self) -> dict[int, LuauSifterResult]:
+        return self.get_lua_objs(TCLOSURE)
+
+    def get_tables(self) -> dict[int, LuauSifterResult]:
+        return self.get_lua_objs(TTABLE)
+
+    def get_protos(self) -> dict[int, LuauSifterResult]:
+        return self.get_lua_objs(TPROTO)
+
+    def get_upvals(self) -> dict[int, LuauSifterResult]:
+        return self.get_lua_objs(TUPVAL)
+
+    def get_threads(self) -> dict[int, LuauSifterResult]:
+        return self.get_lua_objs(TTHREAD)
+
+    def get_potential_objects(self) -> list[LuauSifterResult]:
+        return sorted(self.all_pot_gco.values(), key=lambda x: x.sink_vaddr)
+
+    def parse_line(self, line) -> LuauSifterResult:
+        r = LuauSifterResult.from_line(line)
+        if r.potential_lua_object():
+            self.add_pot_gco_sifter_result(r)
+        else:
+            self.add_pot_structure_sifter_result(r)
+        return r
+
+    def parse_file(self, filename, bulk_load=True, callback=None):
+        fh = open(filename)
+        if bulk_load:
+            data = fh.readlines()
+            for line in data:
+                self.parse_line(line)
+        else:
+            cnt = 0
+            for line in fh:
+                self.parse_line(line)
+                cnt += 1
+
+        if callback:
+            callback()
+
+    def get_potential_tstrings(self) -> list[LuauSifterResult]:
+        pot_objects = list(self.all_pot_gco.values())
+        return sorted([i for i in pot_objects if i.tt == TSTRING and i.marked in VALID_MARKS],
+                      key=lambda u: u.sink_vaddr)
+
