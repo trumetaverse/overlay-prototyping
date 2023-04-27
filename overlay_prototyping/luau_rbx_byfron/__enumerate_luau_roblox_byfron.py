@@ -1,7 +1,4 @@
-import json
-
-from .. luau_roblox.consts import *
-from . overlay_byfron import LuauRWB_GCHeader
+from overlay_prototyping.luau_roblox.overlay_byfron import LuauRWB_GCHeader
 from .. luau_roblox.enumerate_luau_roblox import LuauSifterResult as OldLuauSifterResult, LuauSifterResults as OldLuauSifterResults
 
 LUAR_FILTERS = {
@@ -11,7 +8,7 @@ LUAR_FILTERS = {
 
 
 
-class LuauSifterResult(OldLuauSifterResult):
+class LuauByfronSifterResult(OldLuauSifterResult):
     KEY_VALUES = ["paddr",
                   "vaddr",
                   "sink_vaddr",
@@ -20,7 +17,7 @@ class LuauSifterResult(OldLuauSifterResult):
                   ]
 
     def __init__(self, **kargs):
-        super(LuauSifterResult, self).__init__(**kargs)
+        super(LuauByfronSifterResult, self).__init__(**kargs)
 
         if isinstance(self.sink_value, int):
             gcheader = LuauRWB_GCHeader.from_int(self.sink_vaddr, self.sink_value)
@@ -35,8 +32,8 @@ class LuauSifterResults(OldLuauSifterResults):
     def __init__(self):
         super(LuauSifterResults, self).__init__()
 
-    def parse_line(self, line) -> LuauSifterResult:
-        r = LuauSifterResult.from_line(line)
+    def parse_line(self, line) -> LuauByfronSifterResult:
+        r = LuauByfronSifterResult.from_line(line)
         if r.potential_lua_object():
             self.add_pot_gco_sifter_result(r)
         else:

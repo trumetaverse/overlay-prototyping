@@ -1,7 +1,6 @@
 import json
 
 from .consts import *
-from .overlay_base import LuauRW_GCHeader
 
 LUAR_FILTERS = {
     "addr_is_lua_object": lambda lsr: lsr.sink_vaddr % 8 == 0,
@@ -74,8 +73,26 @@ class LuauSifterResult(object):
     def __repr__(self):
         return str(self)
 
+
+class LuauByfronSifterResult(LuauSifterResult):
+    KEY_VALUES = ["paddr",
+                  "vaddr",
+                  "sink_vaddr",
+                  "sink_paddr",
+                  "sink_value", "sink_paddr_base", "sink_vaddr_base", "vaddr_base", "paddr_base"
+                  ]
+
+    def __init__(self, **kargs):
+        super(LuauByfronSifterResult, self).__init__(**kargs)
+
+        if isinstance(self.sink_value, int):
+            self.marked = (self.sink_value & 0x000000ff)
+            self.tt = (self.sink_value & 0x0000ff00) >> 8
+            self.memcat = (self.sink_value & 0x00ff0000) >> 16
+            self.padding = (self.sink_value & 0xff000000) >> 24
+
 class LuauSifterResults(object):
-    def __init__(self):
+    def __init__(self, byfron_sift_results=False):
         self.gco_srcs = {}
         self.obj_references = {}
         self.all_pot_gco = {}
@@ -89,6 +106,8 @@ class LuauSifterResults(object):
         self.pot_lua_gco = {
             k: {} for k in VALID_OBJ_TYPES
         }
+
+        self.SifterResultCls = LuauSifterResult if not byfron_sift_results else LuauByfronSifterResult
 
 
     def add_pot_gco_sifter_result(self, r):
@@ -155,7 +174,7 @@ class LuauSifterResults(object):
         return sorted(self.all_pot_gco.values(), key=lambda x: x.sink_vaddr)
 
     def parse_line(self, line) -> LuauSifterResult:
-        r = LuauSifterResult.from_line(line)
+        r = self.SifterResultCls.from_line(line)
         if r.potential_lua_object():
             self.add_pot_gco_sifter_result(r)
         else:

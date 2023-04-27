@@ -1,6 +1,6 @@
 import struct
 
-from .luau_roblox_base import LuauRobloxBase
+from .luau_roblox_page import LuauRobloxBase
 from .overlay_base import LUAUR_TSTRING
 from ..base import *
 

@@ -1393,3 +1393,24 @@ VALID_OBJ_CLS_MAPPING = {
     TPROTO: LuauRW_Proto,
     TUPVAL: LuauRW_UpVal,
 }
+
+
+GCO_TT_MAPPING = {
+    TSTRING: LuauRW_TString,
+    TUPVAL: LuauRW_UpVal,
+    TTHREAD: LuauRW_lua_State,
+    TCLOSURE: LuauRW_Closure,
+    TTABLE: LuauRW_Table,
+    TPROTO: LuauRW_ProtoECB,
+    TUSERDATA: LuauRW_Udata
+}
+
+GCO_NAME_MAPPING = {
+    TSTRING: LuauRW_TString,
+    TUPVAL: LuauRW_UpVal,
+    TTHREAD: LuauRW_lua_State,
+    TCLOSURE: LuauRW_Closure,
+    TTABLE: LuauRW_Table,
+    TPROTO: LuauRW_ProtoECB,
+    TUSERDATA: LuauRW_Udata,
+}

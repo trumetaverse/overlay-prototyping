@@ -1067,7 +1067,7 @@ class LuauRWB_GCObjectUnion(LuauRWB_BaseUnion):
 
 
 
-class LuauRW_lua_Page(LuauRWB_BaseStruct):
+class LuauRWB_lua_Page(LuauRWB_BaseStruct):
     __field_def__ = {
         "prev": {"type": "c_uint32"},
         "next": {"type": "c_uint32"},
@@ -1370,7 +1370,6 @@ class LuauRWB_Constant(LuauRWB_BaseStruct):
                  "fmt": "{}", "is_array": False}
         return r, flat
 
-
 FIXUP_TYPE_MAPPING = {
     "TString": LuauRWB_TString,
     "GCObject": LuauRWB_GCObjectUnion,
@@ -1381,7 +1380,7 @@ FIXUP_TYPE_MAPPING = {
     "UpVal": LuauRWB_UpVal,
     "CallInfo": LuauRWB_CallInfo,
     "Instruction": ctypes.c_uint32,
-    "lua_Page": LuauRW_lua_Page,
+    "lua_Page": LuauRWB_lua_Page,
     "LuaNode": LuauRWB_LuaNode,
 }
 
@@ -1393,4 +1392,23 @@ VALID_OBJ_CLS_MAPPING = {
     TTHREAD: LuauRWB_lua_State,
     TPROTO: LuauRWB_Proto,
     TUPVAL: LuauRWB_UpVal,
+}
+
+GCO_TT_BMAPPING = {
+    TSTRING: LuauRWB_TString,
+    TUPVAL: LuauRWB_UpVal,
+    TTHREAD: LuauRWB_lua_State,
+    TCLOSURE: LuauRWB_Closure,
+    TTABLE: LuauRWB_Table,
+    TPROTO: LuauRWB_ProtoECB,
+    TUSERDATA: LuauRWB_Udata
+}
+GCO_NAME_BMAPPING = {
+    TSTRING: LuauRWB_TString,
+    TUPVAL: LuauRWB_UpVal,
+    TTHREAD: LuauRWB_lua_State,
+    TCLOSURE: LuauRWB_Closure,
+    TTABLE: LuauRWB_Table,
+    TPROTO: LuauRWB_ProtoECB,
+    TUSERDATA: LuauRWB_Udata,
 }

@@ -6,192 +6,23 @@ import time
 from threading import Thread
 
 from .consts import *
-from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
+from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult, LuauByfronSifterResult
+from .luau_roblox_page import LuaPages
 # from .luau_roblox_base import LuauRobloxBase
 from .overlay_base import LuauRW_BaseStruct, LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Table, \
-    LuauRW_UpVal, LuauRW_Closure, VALID_OBJ_CLS_MAPPING, LuauRW_GCHeader, LuauRW_TValue, LuauRW_global_State, \
-    LuauRW_lua_Page, LuauRW_ProtoECB
+    LuauRW_UpVal, LuauRW_Closure, LuauRW_GCHeader, LuauRW_TValue, LuauRW_global_State, \
+    LuauRW_lua_Page, LuauRW_ProtoECB, GCO_TT_MAPPING, GCO_NAME_MAPPING
+from .overlay_byfron import LuauRWB_TString, LuauRWB_lua_State, LuauRWB_Udata, LuauRWB_Table, \
+    LuauRWB_UpVal, LuauRWB_Closure, LuauRWB_TValue, LuauRWB_global_State, \
+    LuauRWB_ProtoECB, LuauRWB_GCHeader, LuauRWB_lua_Page, GCO_TT_BMAPPING, GCO_NAME_BMAPPING
 from ..analysis import Analysis, MemRange
 from ..base import BaseException
 
-GCO_TT_MAPPING = {
-    TSTRING: LuauRW_TString,
-    TUPVAL: LuauRW_UpVal,
-    TTHREAD: LuauRW_lua_State,
-    TCLOSURE: LuauRW_Closure,
-    TTABLE: LuauRW_Table,
-    # TPROTO: LuauRW_Proto,
-    TPROTO: LuauRW_ProtoECB,
-    TUSERDATA: LuauRW_Udata
-}
-
-GCO_NAME_MAPPING = {
-    TSTRING: LuauRW_TString,
-    TUPVAL: LuauRW_UpVal,
-    TTHREAD: LuauRW_lua_State,
-    TCLOSURE: LuauRW_Closure,
-    TTABLE: LuauRW_Table,
-    # TPROTO: LuauRW_Proto,
-    TPROTO: LuauRW_ProtoECB,
-    TUSERDATA: LuauRW_Udata,
-}
-
-
-class LuaPage(object):
-    def __init__(self, obj):
-        self.lpage = obj
-        self.addr = obj.addr
-        self.start = obj.addr_of('data')
-        self.end = self.start + obj.pageSize
-        self.size = self.end - self.addr
-        self.objects = {}
-
-    def has_object(self):
-        return len(self.objects) > 0
-
-    def is_gco_page(self) -> bool:
-        lpage = self.lpage
-        return len(self.objects) > 0 or lpage.blockSize == lpage.pageSize or 16360 == lpage.pageSize
-
-    def addr_in(self, addr) -> bool:
-        return self.addr <= addr < self.addr + self.size
-
-    def obj_in(self, obj) -> bool:
-        return self.lpage.addr <= obj.addr < self.end
-
-    def add_object(self, obj) -> bool:
-        if self.obj_in(obj):
-            self.objects[obj.addr] = obj
-            return True
-        return False
-
-    def get_first_object_addr(self) -> int:
-        lpage = self.lpage
-        return lpage.addr + lpage.pageSize + lpage.freeNext
-
-    def add_obj(self, obj):
-        self.objects[obj.addr] = obj
-
-    def add_tvalue(self, tvalue):
-        self.objects[tvalue.addr] = tvalue
-
-
-class LuaPages(object):
-    def __init__(self):
-        self.lpages = {}
-        self.pages_by_block_size = {}
-
-    def add_to_pbs(self, lp: LuauRW_lua_Page):
-        if lp is None:
-            return
-        bs = lp.blockSize
-        if bs not in self.pages_by_block_size:
-            self.pages_by_block_size[bs] = {}
-        self.pages_by_block_size[bs][lp.addr] = lp
-
-    def get_block_sizes(self, bs: int):
-        if bs not in self.pages_by_block_size:
-            return None
-        return sorted(self.pages_by_block_size.keys())
-
-    def get_pages_by_blocksize(self, bs: int):
-        if bs not in self.pages_by_block_size:
-            return None
-        return self.pages_by_block_size[bs]
-
-    def add_obj(self, obj):
-        vaddr = obj.addr if obj else None
-        if vaddr is None:
-            return False
-        lp = self.get_page_with_addr(vaddr)
-        if lp:
-            luapage = self.lpages[lp.addr]
-            luapage.add_obj(obj)
-            return True
-        return False
-
-    def add_tvalue(self, tvalue):
-        vaddr = tvalue.addr if tvalue else None
-        if vaddr is None:
-            return False
-        lp = self.get_page_with_addr(vaddr)
-        if lp:
-            lp.add_tvalue(tvalue)
-            return True
-        return False
-
-    def addr_in(self, addr) -> bool:
-        for v in self.lpages.values():
-            if v.addr_in(addr):
-                return True
-        return False
-
-    def obj_in(self, obj) -> bool:
-        for v in self.lpages.values():
-            if v.addr_in(obj.addr):
-                return True
-        return False
-
-    def get_page_with_addr(self, addr) -> LuauRW_lua_Page | None:
-        for v in self.lpages.values():
-            if v.addr_in(addr):
-                return v.lpage
-        return None
-
-    def get_page_abstraction_with_addr(self, addr) -> LuaPage | None:
-        for v in self.lpages.values():
-            if v.addr_in(addr):
-                return v
-        return None
-
-    def get_page_with_obj(self, obj) -> LuauRW_lua_Page | None:
-        addr = obj.addr
-        for v in self.lpages.values():
-            if v.addr_in(addr):
-                return v.lpage
-        return None
-
-    def add_page(self, lpage: LuauRW_lua_Page, walk_pages=False) -> bool:
-        if isinstance(lpage, LuauRW_lua_Page) and lpage.addr not in self.lpages:
-            lp = LuaPage(lpage)
-            self.lpages[lpage.addr] = lp
-            self.add_to_pbs(lpage)
-            return True
-        return False
-
-    def has_page(self, lpage) -> bool:
-        if lpage is not None and self.has_page_addr(lpage.addr):
-            return True
-        return False
-
-    def has_page_addr(self, addr) -> bool:
-        return addr in self.lpages
-
-    def get_known_page_addrs(self) -> list[int]:
-        return list(self.lpages.keys())
-
-    def get_pages(self) -> list[LuauRW_lua_Page]:
-        return [l.lpage for l in self.lpages.values()]
-
-    def get_first_object_addr(self, lpage=None, addr=None) -> None | int:
-        addr = lpage.addr if addr is None else addr
-        if isinstance(addr, int):
-            lpage = self.get_page_with_addr(addr)
-            if lpage:
-                return self.lpages[lpage.addr].get_first_object_addr()
-            return None
-        elif isinstance(lpage, LuauRW_lua_Page) and lpage.addr in self.lpages:
-            return self.lpages[lpage.addr].get_first_object_addr()
-        elif isinstance(lpage, LuauRW_lua_Page):
-            self.add_page(lpage)
-            return self.lpages[addr].get_first_object_addr()
-        return None
-
 
 class LuauRobloxAnalysis(Analysis):
-
-    def __init__(self, sift_results=None, **kargs):
+    def __init__(self, sift_results=None, luapage_pointers_file=None, byfron_analysis=False, **kargs):
         super(LuauRobloxAnalysis, self).__init__(name="LuauRobloxAnalysis", **kargs)
+        self.luapage_pointers_file = luapage_pointers_file
         self.lrss = None
         self.strings = {}
         self.prims = {}
@@ -227,18 +58,35 @@ class LuauRobloxAnalysis(Analysis):
         self.lua_table_values = {}
         self.lua_pages = LuaPages()
         self.valid_lua_gco_pages = []
-        self.lrss = LuauSifterResults()
+        self.lrss = LuauSifterResults(byfron_sift_results=byfron_analysis)
+        self.GCO_TT_MAPPING = GCO_TT_MAPPING
+        self.GCO_NAME_MAPPING = GCO_NAME_MAPPING
+        self.GCHeaderCls = LuauRW_GCHeader
+        self.TValueCls = LuauRW_TValue
+        self.GlobalStateCls = LuauRW_global_State
+        self.LuaPageCls = LuauRW_lua_Page
+        if byfron_analysis:
+            self.GCO_TT_MAPPING = GCO_TT_BMAPPING
+            self.GCO_NAME_MAPPING = GCO_NAME_BMAPPING
+            self.GCHeaderCls = LuauRWB_GCHeader
+            self.TValueCls = LuauRWB_TValue
+            self.GlobalStateCls = LuauRWB_global_State
+            self.LuaPageCls = LuauRWB_lua_Page
 
-    def read_table_values(self, ttable: LuauRW_Table, add_obj=False) -> dict[LuauRW_TValue]:
-        sizearray = ttable.sizearray
-        tvalues = {}
-        for idx in range(0, sizearray):
-            tva = ttable.get_tvalue_address(idx)
-            tvalue = LuauRW_TValue.from_analysis(tva, self)
-            tvalues[tvalue.addr] = tvalue
-            if add_obj:
-                self.add_struct_object(tva, tvalue)
-        return tvalues
+    def load_lua_pages(self, luapage_pointers_file=None):
+        luapage_pointers_file = self.luapage_pointers_file if luapage_pointers_file is None else luapage_pointers_file
+        if luapage_pointers_file is None:
+            raise Exception("No pointer file provided")
+        self.luapage_pointers_file = luapage_pointers_file
+        lua_page_finds = [json.loads(i) for i in open(luapage_pointers_file).readlines()]
+        pages = [self.LuaPageCls.from_analysis(int(lpj['vaddr'], 16), self) for lpj in lua_page_finds]
+        # pages = [i for i in pages if self.sanity_check_lua_page(i)]
+        results = []
+        for i in pages:
+            r = self.walk_lua_pages(i)
+            results = r + results
+        f = {i.addr: i for i in results}
+        return list(f.values())
 
     def add_gco_to_luapage(self, obj):
         return self.lua_pages.add_obj(obj)
@@ -270,8 +118,20 @@ class LuauRobloxAnalysis(Analysis):
                     raddr = ref['vaddr']
                     self.add_gco_reference(obj, raddr)
 
+    def read_table_values(self, ttable: LuauRW_Table | LuauRWB_Table, add_obj=False) -> dict[LuauRW_TValue]:
+        sizearray = ttable.sizearray
+        tvalues = {}
+        for idx in range(0, sizearray):
+            tva = ttable.get_tvalue_address(idx)
+            tvalue = self.TValueCls.from_analysis(tva, self)
+            tvalues[tvalue.addr] = tvalue
+            if add_obj:
+                self.add_struct_object(tva, tvalue)
+        return tvalues
+
     def get_lua_objs_by_memcat(self, memcat, tt=None) -> dict[
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
+        LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         if memcat is None:
             return self.get_lua_objs(tt=tt)
         objs = {}
@@ -287,7 +147,8 @@ class LuauRobloxAnalysis(Analysis):
         return objs
 
     def get_lua_objs(self, tt=None, memcat=None) -> dict[
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
+        LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         if memcat is not None:
             return self.get_lua_objs_by_memcat(memcat, tt=tt)
 
@@ -302,7 +163,7 @@ class LuauRobloxAnalysis(Analysis):
         return r
 
     def get_lua_object(self, vaddr,
-                       tt=None) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
+                       tt=None) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata | LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata:
         if tt is not None and vaddr in self.lua_gco[tt]:
             return self.lua_gco[tt][vaddr]
         for gcos in self.lua_gco.values():
@@ -310,7 +171,7 @@ class LuauRobloxAnalysis(Analysis):
                 return gcos[vaddr]
         return None
 
-    def get_strings(self) -> dict[LuauRW_TString]:
+    def get_strings(self) -> dict[LuauRW_TString | LuauRWB_TString]:
         return self.get_lua_objs(TSTRING)
 
     def walk_strings(self, add_obj=True):
@@ -329,22 +190,22 @@ class LuauRobloxAnalysis(Analysis):
                 new_strs.append(gco)
         return new_strs
 
-    def get_udatas(self) -> dict[LuauRW_Udata]:
+    def get_udatas(self) -> dict[LuauRW_Udata | LuauRWB_Udata]:
         return self.get_lua_objs(TUSERDATA)
 
-    def get_closures(self) -> dict[LuauRW_Closure]:
+    def get_closures(self) -> dict[LuauRW_Closure | LuauRWB_Closure]:
         return self.get_lua_objs(TCLOSURE)
 
-    def get_tables(self) -> dict[LuauRW_Table]:
+    def get_tables(self) -> dict[LuauRW_Table | LuauRWB_Table]:
         return self.get_lua_objs(TTABLE)
 
-    def get_protos(self) -> dict[LuauRW_ProtoECB]:
+    def get_protos(self) -> dict[LuauRW_ProtoECB | LuauRWB_ProtoECB]:
         return self.get_lua_objs(TPROTO)
 
-    def get_upvals(self) -> dict[LuauRW_UpVal]:
+    def get_upvals(self) -> dict[LuauRW_UpVal | LuauRWB_UpVal]:
         return self.get_lua_objs(TUPVAL)
 
-    def get_threads(self) -> dict[LuauRW_lua_State]:
+    def get_threads(self) -> dict[LuauRW_lua_State | LuauRWB_lua_State]:
         return self.get_lua_objs(TTHREAD)
 
     def check_results_status(self) -> bool:
@@ -368,7 +229,8 @@ class LuauRobloxAnalysis(Analysis):
         return self.sift_results_loaded
 
     def scan_lua_pages_gco(self, add_obj=False) -> [
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
+        LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         lpages = self.lua_pages.get_pages()
         objs = []
         checked = []
@@ -378,11 +240,11 @@ class LuauRobloxAnalysis(Analysis):
             if any([i[0] < lpage.addr < i[1] for i in checked]):
                 self.log.debug("lua_Page already checked, lua_Page @ 0x{:08x} ".format(lpage.addr))
                 continue
-            elif lpage.pageSize > 0x8000 or lpage.pageSize <= 0x100:
-                self.log.debug(
-                    "lua_Page size is incompatible with scan ({}), lua_Page @ 0x{:08x} ".format(hex(lpage.pageSize),
-                                                                                                lpage.addr))
-                continue
+            # elif lpage.pageSize > 0x8000 or lpage.pageSize <= 0x100:
+            #     self.log.debug(
+            #         "lua_Page size is incompatible with scan ({}), lua_Page @ 0x{:08x} ".format(hex(lpage.pageSize),
+            #                                                                                     lpage.addr))
+            #     continue
             lpage_start = lpage.addr
             lpage_end = lpage.addr + 24 + lpage.pageSize
             checked.append([lpage_start, lpage_end])
@@ -399,7 +261,8 @@ class LuauRobloxAnalysis(Analysis):
 
     def scan_block_for_gco(self, block_addr, block_size, add_obj=False, printable_strings=True, incr=4,
                            tables=None) -> [
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
+        LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
 
         tables = tables if isinstance(tables, list) else []
         objs = []
@@ -417,21 +280,23 @@ class LuauRobloxAnalysis(Analysis):
                     incr = gco.get_total_size()
                     objs.append(gco)
                     self.lua_pages.add_obj(gco)
-                    if isinstance(gco, LuauRW_Table):
+                    if isinstance(gco, self.GCO_TT_MAPPING.get(TTABLE)):
                         tables.append(gco)
             else:
                 # this GCO was already known, let's look it up and skip over the size
                 gco = self.get_lua_object(gco_addr)
                 incr = gco.get_total_size()
+                objs.append(gco)
             gco_addr += incr
         return objs
 
     def scan_lua_page_gco(self, addr=None, lpage=None, add_obj=False, printable_strings=True, incr=4) -> [
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
+        LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         objs = []
         if addr is None and lpage is None:
             return objs
-        elif addr is None and not isinstance(lpage, LuauRW_lua_Page):
+        elif addr is None and not (isinstance(lpage, LuauRW_lua_Page) or isinstance(lpage, LuauRWB_lua_Page)):
             return objs
         elif lpage is None and isinstance(addr, int):
             lpage_obj = self.lua_pages.get_page_with_addr(addr)
@@ -463,13 +328,12 @@ class LuauRobloxAnalysis(Analysis):
             offset = 0
             value = self.read_ptr(block_addr, word_sz=self.word_sz)
             # FIXME why is this None
-            if value is None:
-                continue
-            if self.valid_vaddr(value) and value == lpage.addr:
+            # if value is None:
+            #     continue
+            if value is not None and self.valid_vaddr(value) and value == lpage.addr:
                 offset = -8
             _objs = self.scan_block_for_gco(block_addr + offset, block_size + offset, add_obj=add_obj,
                                             printable_strings=printable_strings, incr=incr, tables=tables)
-            objs = objs + _objs
         return objs
 
     def sift_results_load_complete(self) -> dict:
@@ -562,7 +426,7 @@ class LuauRobloxAnalysis(Analysis):
         return self.check_results_status()
 
     def get_gco_overlay(self, vaddr, ctypes_cls, buf=None, ref_addr=None, add_obj=False, sanity_check=False,
-                        caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
+                        caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata | LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata:
         ett = getattr(ctypes_cls, '_tt_', None)
         if ett is None or not ctypes_cls.has_gc_header() or vaddr in self.not_lua_objects[ett]:
             return None
@@ -622,12 +486,12 @@ class LuauRobloxAnalysis(Analysis):
 
         return obj
 
-    def add_string_at_vaddr(self, vaddr, ref_vaddr=None) -> None | LuauRW_TString:
+    def add_string_at_vaddr(self, vaddr, ref_vaddr=None) -> None | LuauRW_TString | LuauRWB_TString:
         obj = self.get_lua_object(vaddr, TSTRING)
         if obj is not None and obj.is_string():
             return obj
         data = self.read_vaddr(vaddr, self.DEFAULT_OBJECT_READ_SZ)
-        s = LuauRW_TString.from_bytes(vaddr, data, analysis=self, word_sz=self.word_sz)
+        s = self.GCO_TT_MAPPING.get(TSTRING).from_bytes(vaddr, data, analysis=self, word_sz=self.word_sz)
         if s is not None and s.is_valid_gc_header() and s.get_gch().tt == TSTRING:
             self.add_gc_object(s.addr, s, ref_vaddr)
             nvaddr = s.next
@@ -641,11 +505,11 @@ class LuauRobloxAnalysis(Analysis):
             v.add(addr)
 
     def read_gco(self, vaddr, tt=None, add_obj=False,
-                 caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
+                 caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata | LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata:
         if tt is None:
             gco = None
             try:
-                gco = LuauRW_GCHeader.from_analysis(vaddr, self)
+                gco = self.GCHeaderCls.from_analysis(vaddr, self)
             except:
                 if caution:
                     raise
@@ -654,27 +518,27 @@ class LuauRobloxAnalysis(Analysis):
             # else:
             #     self.bad_obj_address(vaddr)
 
-        if tt not in VALID_OBJ_CLS_MAPPING:
+        if tt not in self.GCO_TT_MAPPING:
             return None
         elif vaddr in self.not_lua_objects[tt]:
             return None
 
-        cls = VALID_OBJ_CLS_MAPPING.get(tt)
+        cls = self.GCO_TT_MAPPING.get(tt)
         return self.get_gco_overlay(vaddr, cls, add_obj=add_obj, caution=caution)
 
-    def read_tvalue(self, vaddr, index=0, add_obj=False, caution=False) -> None | LuauRW_TValue:
-        tv = LuauRW_TValue.from_analysis(vaddr, self)
+    def read_tvalue(self, vaddr, index=0, add_obj=False, caution=False) -> None | LuauRW_TValue | LuauRWB_TValue:
+        tv = self.TValueCls.from_analysis(vaddr, self)
         return tv
 
     def read_gco_ptr(self, pvaddr, tt=None, word_sz=4, little_endian=True, add_obj=False,
-                     caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata:
+                     caution=False) -> None | LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata | LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata:
         vaddr = None
         if tt is None:
             vaddr = self.deref_address(pvaddr, word_sz, little_endian)
             if vaddr is None:
                 self.bad_obj_address(pvaddr)
                 return None
-            gco = LuauRW_GCHeader.from_analysis(vaddr, self)
+            gco = self.GCHeaderCls.from_analysis(vaddr, self)
             if gco is not None:
                 tt = gco.tt
             else:
@@ -682,12 +546,12 @@ class LuauRobloxAnalysis(Analysis):
 
         if vaddr is None:
             return None
-        elif tt not in VALID_OBJ_CLS_MAPPING:
+        elif tt not in self.GCO_TT_MAPPING:
             return None
         elif vaddr in self.not_lua_objects[tt]:
             return None
 
-        cls = VALID_OBJ_CLS_MAPPING.get(tt)
+        cls = self.GCO_TT_MAPPING.get(tt)
         return self.get_gco_overlay(vaddr, cls, ref_addr=pvaddr, add_obj=add_obj, caution=caution)
 
     def read_struct_ptr(self, pvaddr: int, obj_cls: LuauRW_BaseStruct, word_sz=4, little_endian=True,
@@ -704,7 +568,7 @@ class LuauRobloxAnalysis(Analysis):
             self.add_gc_object(vaddr, obj, pvaddr)
         return obj
 
-    def find_lua_strings_from_sift_file(self) -> dict[LuauRW_TString]:
+    def find_lua_strings_from_sift_file(self) -> dict[LuauRW_TString | LuauRWB_TString]:
         if not self.memory_loaded:
             self.load_memory()
 
@@ -714,13 +578,14 @@ class LuauRobloxAnalysis(Analysis):
         return self.get_strings_from_sifter_results()
 
     def get_potential_objects_from_sifter(self, tt, perform_overlay=True, add_obj=False) -> list[
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
+        LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         results = []
         for o in self.lrss.get_potential_objects():
             # this is a sifter result and not an object
             if o.is_valid_gc_header() and o.tt == tt:
                 if perform_overlay:
-                    cls_type = VALID_OBJ_CLS_MAPPING.get(tt)
+                    cls_type = self.GCO_TT_MAPPING.get(tt)
                     obj = self.get_gco_overlay(o.sink_vaddr, cls_type, add_obj=add_obj)
                     if obj is not None:
                         results.append(obj)
@@ -729,7 +594,8 @@ class LuauRobloxAnalysis(Analysis):
         return results
 
     def sanity_check(self, obj, add_obj=False, printable_strings=False, tables=None) -> None | list[
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
+        LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         tables = tables if tables else list(self.get_tables().values())
         if obj.tt == TSTRING:
             return self.sanity_check_tstrings([obj], add_obj=add_obj, printable_strings=printable_strings)
@@ -747,7 +613,8 @@ class LuauRobloxAnalysis(Analysis):
             return self.sanity_check_upvals([obj], add_obj=add_obj)
         return None
 
-    def sanity_check_tstrings(self, tstring_list, add_obj=False, printable_strings=False) -> list[LuauRW_TString]:
+    def sanity_check_tstrings(self, tstring_list, add_obj=False, printable_strings=False) -> list[
+        LuauRW_TString | LuauRWB_TString]:
         tstrings = []
         for obj in tstring_list:
             if not self.check_string(obj, printable_string=False):
@@ -755,7 +622,7 @@ class LuauRobloxAnalysis(Analysis):
 
             tstrings.append(obj)
             self.strings[obj.addr] = obj
-            value = None if not isinstance(obj, LuauRW_TString) else obj.get_value()
+            value = None if not isinstance(obj, self.GCO_TT_MAPPING.get(TSTRING)) else obj.get_value()
             if printable_strings and value is not None and self.is_printable_string(value):
                 self.printable_strings[obj.addr] = obj
 
@@ -768,13 +635,14 @@ class LuauRobloxAnalysis(Analysis):
         return tstrings
 
     def potentials_tstrings(self, sanity_check=False, add_obj=False, printable_strings=True, tables=None) -> list[
-        LuauRW_TString]:
+        LuauRW_TString | LuauRWB_TString]:
         r = self.get_potential_objects_from_sifter(TSTRING)
         if sanity_check:
             return self.sanity_check_tstrings(r, add_obj=add_obj, printable_strings=printable_strings)
         return r
 
-    def sanity_check_closures(self, closeure_list, add_obj=False, tables=None) -> list[LuauRW_Closure]:
+    def sanity_check_closures(self, closeure_list, add_obj=False, tables=None) -> list[
+        LuauRW_Closure | LuauRWB_Closure]:
         if tables is None:
             tables = self.potentials_tables(sanity_check=True, add_obj=add_obj)
         dt = {t.addr: t for t in tables}
@@ -782,18 +650,26 @@ class LuauRobloxAnalysis(Analysis):
         for obj in closeure_list:
             if obj.env in dt:
                 closures.append(obj)
+                continue
+            elif not self.valid_vaddr(obj.env):
+                continue
+            gco = self.read_gco(obj.env, TTABLE, caution=False)
+            if gco is None:
+                continue
+            dt[gco.addr] = gco
         if add_obj:
             for o in closures:
                 self.add_gc_object(o.addr, o)
         return closures
 
-    def potentials_closures(self, sanity_check=False, add_obj=False, tables=None) -> list[LuauRW_Closure]:
+    def potentials_closures(self, sanity_check=False, add_obj=False, tables=None) -> list[
+        LuauRW_Closure | LuauRWB_Closure]:
         r = self.get_potential_objects_from_sifter(TCLOSURE)
         if sanity_check:
             self.sanity_check_closures(r, add_obj=add_obj, tables=tables)
         return r
 
-    def sanity_check_userdatas(self, userdata_list, add_obj=False, tables=None) -> list[LuauRW_Udata]:
+    def sanity_check_userdatas(self, userdata_list, add_obj=False, tables=None) -> list[LuauRW_Udata | LuauRWB_Udata]:
         userdatas = []
         if tables is None:
             tables = self.potentials_tables(sanity_check=True, add_obj=add_obj)
@@ -806,13 +682,14 @@ class LuauRobloxAnalysis(Analysis):
                 self.add_gc_object(o.addr, o)
         return userdatas
 
-    def potentials_userdatas(self, sanity_check=False, add_obj=False, tables=None) -> list[LuauRW_Udata]:
+    def potentials_userdatas(self, sanity_check=False, add_obj=False, tables=None) -> list[
+        LuauRW_Udata | LuauRWB_Udata]:
         r = self.get_potential_objects_from_sifter(TUSERDATA)
         if sanity_check:
             return self.sanity_check_userdatas(r, add_obj=add_obj, tables=tables)
         return r
 
-    def sanity_check_threads(self, thread_list, add_obj=False, tables=None) -> list[LuauRW_lua_State]:
+    def sanity_check_threads(self, thread_list, add_obj=False, tables=None) -> list[LuauRWB_lua_State]:
         threads = []
         dt = {t.addr: t for t in thread_list}
         if tables is None:
@@ -823,7 +700,8 @@ class LuauRobloxAnalysis(Analysis):
             call_info = self.valid_vaddr(obj.ci)
             stack = self.valid_vaddr(obj.stack)
             stack_last = self.valid_vaddr(obj.stack_last)
-            gt = self.valid_vaddr(obj.gt) and obj.gt in dtables
+            # relaxing the check on the global table.  may not be known
+            gt = True # obj.gt == 0 or self.valid_vaddr(obj.gt) and obj.gt in dtables
             all_checks = [global_state, call_info, stack, stack_last, gt]
             if all(all_checks):
                 threads.append(obj)
@@ -832,7 +710,8 @@ class LuauRobloxAnalysis(Analysis):
                 self.add_gc_object(o.addr, o)
         return threads
 
-    def potentials_threads(self, sanity_check=False, add_obj=False, tables=None) -> list[LuauRW_lua_State]:
+    def potentials_threads(self, sanity_check=False, add_obj=False, tables=None) -> list[
+        LuauRW_lua_State | LuauRWB_lua_State]:
         r = self.get_potential_objects_from_sifter(TTHREAD)
         if sanity_check:
             self.sanity_check_threads(r, add_obj=add_obj, tables=tables)
@@ -851,14 +730,14 @@ class LuauRobloxAnalysis(Analysis):
                 self.add_gc_object(o.addr, o)
         return tables
 
-    def potentials_tables(self, sanity_check=False, add_obj=False) -> list[LuauRW_Table]:
+    def potentials_tables(self, sanity_check=False, add_obj=False) -> list[LuauRW_Table | LuauRWB_Table]:
         r = self.get_potential_objects_from_sifter(TTABLE)
         if sanity_check:
             return self.sanity_check_tables(r, add_obj=add_obj)
         return r
 
     def sanity_check_protos(self, protos_list, add_obj=False, check_execdata=True, tables=None) -> list[
-        LuauRW_ProtoECB]:
+        LuauRW_ProtoECB | LuauRWB_ProtoECB]:
         v_k = lambda p: p.k == 0 or self.valid_vaddr(p.k)
         v_code = lambda p: p.code > 0 and self.valid_vaddr(p.code)
         v_p = lambda p: p.p == 0 or self.valid_vaddr(p.p)
@@ -873,7 +752,7 @@ class LuauRobloxAnalysis(Analysis):
         ]
         if check_execdata:
             v_execdata = lambda p: p.execdata == 0 or self.valid_vaddr(p.execdata) \
-                if isinstance(p, LuauRW_ProtoECB) else True
+                if isinstance(p, self.GCO_TT_MAPPING.get(TPROTO)) else True
             checks.append(v_execdata)
         protos = {}
         for p in protos_list:
@@ -889,41 +768,54 @@ class LuauRobloxAnalysis(Analysis):
         return lprotos
 
     def potentials_prototypes(self, sanity_check=False, add_obj=False, check_execdata=True, tables=None) -> list[
-        LuauRW_ProtoECB]:
+        LuauRW_ProtoECB | LuauRWB_ProtoECB]:
         r = self.get_potential_objects_from_sifter(TPROTO)
         if sanity_check:
             return self.sanity_check_protos(r, add_obj=add_obj, check_execdata=check_execdata, tables=tables)
         return r
 
-    def sanity_check_upvals(self, upvals_list, add_obj=False) -> list[LuauRW_UpVal]:
+    def sanity_check_upvals(self, upvals_list, add_obj=False) -> list[LuauRW_UpVal | LuauRWB_UpVal]:
         upvals = []
         for obj in upvals_list:
+            gco_valid = False
             if self.valid_vaddr(obj.v):
                 tvalue = None
                 try:
-                    tvalue = LuauRW_TValue.from_analysis(obj.v, self)
+                    tvalue = self.TValueCls.from_analysis(obj.v, self)
+                    if tvalue.tt in self.GCO_TT_MAPPING and self.valid_vaddr(tvalue.value.gc):
+                        gco = self.read_gco(tvalue.value.gc, tt=tvalue.tt, caution=False)
+                        if gco is not None:
+                            self.add_gc_object(gco.addr, gco, ref_addr=tvalue.addr)
+                            gco_valid = True
+                    else:
+                        continue
                 except:
-                    break
-                if tvalue and tvalue.tt in LUA_TAG_TYPES:
+                    continue
+
+                # its an object
+                if tvalue and tvalue.tt in self.GCO_TT_MAPPING and self.valid_vaddr(tvalue.value.gc):
+                    upvals.append(obj)
+                # its a value not an object
+                elif tvalue and tvalue.tt in LUA_TAG_TYPES and tvalue.tt not in GCO_TT_BMAPPING:
                     upvals.append(obj)
         if add_obj:
             for o in upvals:
                 self.add_gc_object(o.addr, o)
         return upvals
 
-    def potentials_upvals(self, sanity_check=False, add_obj=False, tables=None) -> list[LuauRW_UpVal]:
+    def potentials_upvals(self, sanity_check=False, add_obj=False, tables=None) -> list[LuauRW_UpVal | LuauRWB_UpVal]:
         r = self.get_potential_objects_from_sifter(TUPVAL)
         if sanity_check:
             return self.sanity_check_upvals(r, add_obj=add_obj)
         return r
 
-    def find_potential_global_state(self, pot_threads=None) -> dict[LuauRW_global_State]:
+    def find_potential_global_state(self, pot_threads=None) -> dict[LuauRW_global_State | LuauRWB_global_State]:
         globals_results = {}
         pot_threads = self.potentials_threads() if pot_threads is None else pot_threads
         gs_addrs = {getattr(i, 'global'): i for i in pot_threads if
                     i is not None and self.valid_vaddr(getattr(i, 'global'))}
 
-        global_states = [LuauRW_global_State.from_analysis(i, self, safe_load=False) for i in gs_addrs]
+        global_states = [self.GlobalStateCls.from_analysis(i, self, safe_load=False) for i in gs_addrs]
         global_states = [i for i in global_states if i is not None]
         for gs in global_states:
             frealloc = gs.frealloc > 0 or self.valid_vaddr(gs.frealloc)
@@ -938,20 +830,11 @@ class LuauRobloxAnalysis(Analysis):
                 globals_results[gs.addr] = gs
         return globals_results
 
-    # @classmethod
-    # def create_class(cls, name, overlay):
-    #     return LuauRobloxBase.create_overlay(name, overlay, bases=(LuauRobloxBase,))
-
-    # def create_object_at(self, name, overlay, vaddr, sz=8192):
-    #     cls = LuauRobloxBase.create_overlay(name, overlay)
-    #     data = self.read_vaddr(vaddr, sz)
-    #     return cls.from_bytes(vaddr, data, self, self.is_32bit)
-
     def get_memrange(self, vaddr) -> MemRange:
         return self.mem_ranges.get_memrange_from_vaddr(vaddr)
 
     def get_objects_in_section(self, vaddr) -> list[
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata | LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         results = []
         mr = self.get_memrange(vaddr)
         if mr is None:
@@ -964,7 +847,7 @@ class LuauRobloxAnalysis(Analysis):
         return results
 
     def get_pot_objects_in_section(self, vaddr) -> list[
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata | LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         results = []
         mr = self.get_memrange(vaddr)
         if mr is None:
@@ -1002,7 +885,7 @@ class LuauRobloxAnalysis(Analysis):
                 results.append(v)
         return results
 
-    def get_strings_from_sifter_results(self) -> dict[LuauRW_TString]:
+    def get_strings_from_sifter_results(self) -> dict[LuauRW_TString | LuauRWB_TString]:
         pot_tstrings = self.lrss.get_potential_tstrings()
         for ts in pot_tstrings:
             vaddr = ts.sink_vaddr
@@ -1012,7 +895,7 @@ class LuauRobloxAnalysis(Analysis):
             self.add_string_at_vaddr(vaddr, ref_vaddr=ref_vaddr)
         return self.get_strings()
 
-    def get_builtin_strings_from_sifter_results(self) -> dict[LuauRW_TString]:
+    def get_builtin_strings_from_sifter_results(self) -> dict[LuauRW_TString | LuauRWB_TString]:
         pot_tstrings = self.lrss.get_potential_tstrings()
         for ts in pot_tstrings:
             vaddr = ts.sink_vaddr
@@ -1024,14 +907,14 @@ class LuauRobloxAnalysis(Analysis):
             self.add_string_at_vaddr(vaddr, ref_vaddr=ref_vaddr)
         return self.get_strings()
 
-    def find_anchor_strings(self) -> dict[LuauRW_TString]:
+    def find_anchor_strings(self) -> dict[LuauRW_TString | LuauRWB_TString]:
         if not self.is_sift_results_loaded():
             self.load_sift_results()
         lua_strings = self.get_safe_strings()
 
         anchor_objects = {}
         for s in lua_strings.values():
-            value = None if not isinstance(s, LuauRW_TString) else s.get_value()
+            value = None if not isinstance(s, self.GCO_TT_MAPPING.get(TSTRING)) else s.get_value()
             if len(str(value)) == 0:
                 continue
             if value in LUAR_ROBLOX_TYPES or value in LUAR_ROBLOX_EVENT_NAMES:
@@ -1041,7 +924,7 @@ class LuauRobloxAnalysis(Analysis):
         return anchor_objects
 
     def find_anchor_objects(self) -> dict[
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
+        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata | LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         self.anchor_objects = {}
         if not self.is_sift_results_loaded():
             self.load_sift_results()
@@ -1053,15 +936,6 @@ class LuauRobloxAnalysis(Analysis):
         # now that we have anchor pages
         # find all gco threads
         return self.anchor_objects
-
-    def find_printable_strings(self) -> list[LuauRW_TString]:
-        pstrings = []
-        tstrings = self.potentials_tstrings(sanity_check=True, printable_strings=True)
-        for obj in tstrings:
-            value = None if not isinstance(obj, LuauRW_TString) else obj.get_value()
-            if all([i in string.printable for i in value]):
-                pstrings.append(obj)
-        return pstrings
 
     def get_printable_strings(self):
         strings = self.get_strings()
@@ -1075,6 +949,21 @@ class LuauRobloxAnalysis(Analysis):
     def is_printable_string(self, value) -> bool:
         return value is not None and all([i in string.printable for i in value])
 
+    def get_safe_strings(self, rerun=True) -> dict[LuauRW_TString | LuauRWB_TString]:
+        if not rerun:
+            return self.printable_strings
+        lua_strings = self.potentials_tstrings(sanity_check=True, printable_strings=True, add_obj=True)
+        return {o.addr: o for o in lua_strings}
+
+    def find_printable_strings(self) -> list[LuauRW_TString]:
+        pstrings = []
+        tstrings = self.potentials_tstrings(sanity_check=True, printable_strings=True)
+        for obj in tstrings:
+            value = None if not (isinstance(obj, self.GCO_TT_MAPPING.get(TSTRING))) else obj.get_value()
+            if all([i in string.printable for i in value]):
+                pstrings.append(obj)
+        return pstrings
+
     def check_string(self, obj, printable_string=False) -> bool:
         if printable_string and obj.addr in self.printable_strings:
             return True
@@ -1083,28 +972,12 @@ class LuauRobloxAnalysis(Analysis):
 
         if not self.valid_vaddr(obj.end) or obj.end < obj.addr:
             return False
-        value = None if not isinstance(obj, LuauRW_TString) else obj.get_value()
+        value = None if not (isinstance(obj, self.GCO_TT_MAPPING.get(TSTRING))) else obj.get_value()
         if value is None or len(value) > MAXSSIZE:
             return False
         elif printable_string and not self.is_printable_string(value):
             return False
         return True
-
-    def get_safe_strings(self, rerun=True) -> dict[LuauRW_TString]:
-        if not rerun:
-            return self.printable_strings
-        lua_strings = self.potentials_tstrings(sanity_check=True, printable_strings=True, add_obj=True)
-        return {o.addr: o for o in lua_strings}
-
-    def get_objects_in_anchor_section(self, obj_tt=None) -> [LuauSifterResult]:
-        results = []
-        if len(self.anchor_sections) == 0:
-            self.find_anchor_pages()
-
-        pot_objects = self.get_potential_objects_from_sifter(obj_tt)
-        mrs = [i['memory_range'] for i in self.anchor_sections.values()]
-        results = [i for i in pot_objects if any([mr.vaddr <= i.addr < mr.vaddr + mr.vsize for mr in mrs])]
-        return results
 
     def enumerate_objects_in_anchor_sections(self):
         lua_strings = self.get_strings_from_sifter_results()
@@ -1250,16 +1123,29 @@ class LuauRobloxAnalysis(Analysis):
             _ = self.walk_lua_pages(lpage, max_size=max_size)
         return list(self.lua_pages.get_pages())
 
-    def sanity_check_lua_page(self, lpage: LuauRW_lua_Page, max_size=DEFAULT_MAX_SIZE):
-        if lpage is None:
+    def sanity_check_lua_page(self, lpage: LuauRW_lua_Page | LuauRWB_lua_Page, max_size=DEFAULT_MAX_SIZE):
+        if not isinstance(lpage, self.LuaPageCls):
+            self.log.debug(
+                "lua_Page failed sanity check 0x{:08x}: invalid python class".format(lpage.addr))
             return False
         elif lpage.pageSize > max_size or lpage.pageSize < 32:
+            self.log.debug(
+                "lua_Page failed sanity check 0x{:08x}: lpage.pageSize > max_size or lpage.pageSize < 32".format(
+                    lpage.addr))
             return False
-        elif lpage.blockSize <= 7 or lpage.blockSize > max_size:
+        elif lpage.blockSize <= 7:# or lpage.blockSize > max_size:
+            self.log.debug(
+                "lua_Page failed sanity check 0x{:08x}: lpage.blockSize <= 7 or lpage.blockSize > max_size".format(
+                    lpage.addr))
             return False
         elif lpage.pageSize < lpage.blockSize:
+            self.log.debug(
+                "lua_Page failed sanity check 0x{:08x}: lpage.pageSize < lpage.blockSize".format(lpage.addr))
             return False
         elif lpage.pageSize < lpage.blockSize * lpage.busyBlocks:
+            self.log.debug(
+                "lua_Page failed sanity check 0x{:08x}: lpage.pageSize < lpage.blockSize * lpage.busyBlocks".format(
+                    lpage.addr))
             return False
         return True
 
@@ -1273,7 +1159,7 @@ class LuauRobloxAnalysis(Analysis):
             if nlp is None or nlp.gcolistnext == 0 or \
                     not self.valid_vaddr(nlp.gcolistnext):
                 break
-            nlp = LuauRW_lua_Page.from_analysis(nlp.gcolistnext, analysis=self, safe_load=False)
+            nlp = self.LuaPageCls.from_analysis(nlp.gcolistnext, analysis=self, safe_load=False)
             if self.lua_pages.has_page(nlp):
                 break
             if nlp is not None and self.sanity_check_lua_page(nlp, max_size=max_size):
@@ -1291,7 +1177,7 @@ class LuauRobloxAnalysis(Analysis):
             if nlp is None or nlp.next == 0 or \
                     not self.valid_vaddr(nlp.next):
                 break
-            nlp = LuauRW_lua_Page.from_analysis(nlp.next, analysis=self, safe_load=False)
+            nlp = self.LuaPageCls.from_analysis(nlp.next, analysis=self, safe_load=False)
             if self.lua_pages.has_page(nlp):
                 break
             if nlp is not None and self.sanity_check_lua_page(nlp, max_size=max_size):
@@ -1309,7 +1195,7 @@ class LuauRobloxAnalysis(Analysis):
             if nlp is None or nlp.prev == 0 or \
                     not self.valid_vaddr(nlp.prev):
                 break
-            nlp = LuauRW_lua_Page.from_analysis(nlp.prev, analysis=self, safe_load=False)
+            nlp = self.LuaPageCls.from_analysis(nlp.prev, analysis=self, safe_load=False)
             if self.lua_pages.has_page(nlp):
                 break
             if nlp is not None and self.sanity_check_lua_page(nlp, max_size=max_size):
@@ -1327,7 +1213,7 @@ class LuauRobloxAnalysis(Analysis):
             if nlp is None or nlp.gcolistprev == 0 or \
                     not self.valid_vaddr(nlp.gcolistprev):
                 break
-            nlp = LuauRW_lua_Page.from_analysis(nlp.gcolistprev, analysis=self, safe_load=False)
+            nlp = self.LuaPageCls.from_analysis(nlp.gcolistprev, analysis=self, safe_load=False)
             if self.lua_pages.has_page(nlp):
                 break
             if nlp is not None and self.sanity_check_lua_page(nlp, max_size=max_size):
@@ -1341,7 +1227,6 @@ class LuauRobloxAnalysis(Analysis):
         :param lua_page:
         :return:
         '''
-        self.lua_pages.add_page(lua_page)
         if lua_page is not None and self.sanity_check_lua_page(lua_page, max_size=max_size):
             flua_pages = self.walk_lua_page_gcolist_forward(lua_page, max_size=max_size)
             blua_pages = self.walk_lua_page_gcolist_backward(lua_page, max_size=max_size)
@@ -1359,6 +1244,8 @@ class LuauRobloxAnalysis(Analysis):
                 if nlp.prev > 0 and nlp.prev not in already_visited:
                     not_visited_pages.add(nlp.prev)
 
+            self.lua_pages.add_page(lua_page)
+            already_visited = set(self.lua_pages.get_known_page_addrs())
             not_visited_pages = list(not_visited_pages)
             self.log.debug("found {} unvisited lua pages".format(len(not_visited_pages)))
             # performing page discovery on the new pages
@@ -1367,12 +1254,13 @@ class LuauRobloxAnalysis(Analysis):
                 already_visited.add(nla)
                 if nla == 0 or self.lua_pages.has_page_addr(nla) or not self.valid_vaddr(nla):
                     continue
-                nlp = LuauRW_lua_Page.from_analysis(nla, analysis=self, safe_load=False)
+                nlp = self.LuaPageCls.from_analysis(nla, analysis=self, safe_load=False)
                 if not self.sanity_check_lua_page(nlp, max_size=max_size):
                     continue
                 more_pages = self.walk_lua_pages(nlp)
                 mp = [i.addr for i in more_pages if i.addr not in already_visited]
                 not_visited_pages = not_visited_pages + mp
+
         return list(self.lua_pages.get_pages())
 
     def find_lua_page_header(self, start_addr=None, allowed_failures=3, stop_addr=None,
@@ -1398,14 +1286,14 @@ class LuauRobloxAnalysis(Analysis):
                 "No gcos found in the page, suspect using start address for end of search: 0x{:08x}".format(start_addr))
 
         # adding some wiggle room to find the page.  also making sure address falls on the 8-byte boundary
-        pot_page_addr = pot_page_addr - ctypes.sizeof(LuauRW_lua_Page)
+        pot_page_addr = pot_page_addr - ctypes.sizeof(self.LuaPageCls)
         pot_page_addr = pot_page_addr if pot_page_addr % 8 == 0 else pot_page_addr - (pot_page_addr % 8)
 
         self.log.debug(
             "Searching for the Luau lua_Page header between 0x{:08x} and 0x{:08x}".format(pot_page_addr, end_addr))
 
         while pot_page_addr < end_addr:
-            lua_page = LuauRW_lua_Page.from_analysis(pot_page_addr, analysis=self, safe_load=False)
+            lua_page = self.LuaPageCls.from_analysis(pot_page_addr, analysis=self, safe_load=False)
             if self.sanity_check_lua_page(lua_page) and lua_page.pageSize == 0x3fe8 and lua_page.blockSize == 32:
                 self.log.debug(
                     "Found a potential lua_Page header at 0x{:08x}".format(lua_page.addr))
@@ -1502,7 +1390,7 @@ class LuauRobloxAnalysis(Analysis):
             gc_addr = self.read_uint(tval_addr)
             if (tval_tt in VALID_OBJ_TYPES and self.valid_vaddr(gc_addr)) or \
                     (parse_bare_pointers and self.valid_vaddr(gc_addr)):
-                tvalue = LuauRW_TValue.from_analysis(tval_addr, self, safe_load=False)
+                tvalue = self.TValueCls.from_analysis(tval_addr, self, safe_load=False)
                 gco = None
                 if tvalue is not None:
                     gco = self.read_gco(tvalue.value.gc)
@@ -1551,11 +1439,13 @@ class LuauRobloxAnalysis(Analysis):
             "Scanning {} ({} size) blocks in lua_Page {:08x} tvalues".format(len(block_addrs), block_size, lp.addr))
         for block_addr in block_addrs:
             # first 8 bytes of a block are metadata that point to the top of the page
+            if not self.valid_vaddr(block_addr):
+                self.log.debug(
+                    "Block address 0x{:08x} in lua_Page: 0x{:08x} is invalid".format(block_addr, lp.addr))
+                continue
             offset = 0
             value = self.read_ptr(block_addr, word_sz=self.word_sz)
-            if value is None:
-                continue
-            if self.valid_vaddr(value) and value == lp.addr:
+            if value is not None and self.valid_vaddr(value) and value == lp.addr:
                 offset = -8
             _ = self.scan_block_for_tval(block_addr + offset, block_size + offset, add_obj=add_obj, pot_gco=pot_gco,
                                          pot_tt=pot_tt,
@@ -1713,3 +1603,12 @@ class LuauRobloxAnalysis(Analysis):
 
             self.log.debug("Completed loading state from {}".format(inputfile))
         return True
+
+    def get_objects_in_anchor_section(self, obj_tt=None) -> [LuauSifterResult | LuauByfronSifterResult]:
+        if len(self.anchor_sections) == 0:
+            self.find_anchor_pages()
+
+        pot_objects = self.get_potential_objects_from_sifter(obj_tt)
+        mrs = [i['memory_range'] for i in self.anchor_sections.values()]
+        results = [i for i in pot_objects if any([mr.vaddr <= i.addr < mr.vaddr + mr.vsize for mr in mrs])]
+        return results
