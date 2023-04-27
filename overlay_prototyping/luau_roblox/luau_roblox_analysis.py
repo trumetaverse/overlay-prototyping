@@ -82,11 +82,18 @@ class LuauRobloxAnalysis(Analysis):
         self.luapage_pointers_file = luapage_pointers_file
         lua_page_finds = [json.loads(i) for i in open(luapage_pointers_file).readlines()]
         pages = [self.LuaPageCls.from_analysis(int(lpj['vaddr'], 16), self) for lpj in lua_page_finds]
-        # pages = [i for i in pages if self.sanity_check_lua_page(i)]
+        pages = [i for i in pages if self.sanity_check_lua_page(i)]
         results = []
+        already_visited = set(self.lua_pages.get_known_page_addrs())
         for i in pages:
+            if i.addr in already_visited:
+                continue
             r = self.walk_lua_pages(i)
+            already_visited.add(i.addr)
+            for l in r:
+                already_visited.add(l.addr)
             results = r + results
+
         f = {i.addr: i for i in results}
         return list(f.values())
 
@@ -1162,7 +1169,7 @@ class LuauRobloxAnalysis(Analysis):
                     not self.valid_vaddr(nlp.gcolistnext):
                 break
             nlp = self.LuaPageCls.from_analysis(nlp.gcolistnext, analysis=self, safe_load=False)
-            if self.lua_pages.has_page(nlp):
+            if self.lua_pages.has_page(nlp) or not self.sanity_check_lua_page(nlp, max_size=max_size):
                 break
             if nlp is not None and self.sanity_check_lua_page(nlp, max_size=max_size):
                 self.lua_pages.add_page(nlp)
@@ -1180,7 +1187,7 @@ class LuauRobloxAnalysis(Analysis):
                     not self.valid_vaddr(nlp.next):
                 break
             nlp = self.LuaPageCls.from_analysis(nlp.next, analysis=self, safe_load=False)
-            if self.lua_pages.has_page(nlp):
+            if self.lua_pages.has_page(nlp) or not self.sanity_check_lua_page(nlp, max_size=max_size):
                 break
             if nlp is not None and self.sanity_check_lua_page(nlp, max_size=max_size):
                 self.lua_pages.add_page(nlp)
@@ -1198,7 +1205,7 @@ class LuauRobloxAnalysis(Analysis):
                     not self.valid_vaddr(nlp.prev):
                 break
             nlp = self.LuaPageCls.from_analysis(nlp.prev, analysis=self, safe_load=False)
-            if self.lua_pages.has_page(nlp):
+            if self.lua_pages.has_page(nlp) or not self.sanity_check_lua_page(nlp, max_size=max_size):
                 break
             if nlp is not None and self.sanity_check_lua_page(nlp, max_size=max_size):
                 self.lua_pages.add_page(nlp)
@@ -1216,7 +1223,7 @@ class LuauRobloxAnalysis(Analysis):
                     not self.valid_vaddr(nlp.gcolistprev):
                 break
             nlp = self.LuaPageCls.from_analysis(nlp.gcolistprev, analysis=self, safe_load=False)
-            if self.lua_pages.has_page(nlp):
+            if self.lua_pages.has_page(nlp) or not self.sanity_check_lua_page(nlp, max_size=max_size):
                 break
             if nlp is not None and self.sanity_check_lua_page(nlp, max_size=max_size):
                 self.lua_pages.add_page(nlp)
@@ -1229,14 +1236,23 @@ class LuauRobloxAnalysis(Analysis):
         :param lua_page:
         :return:
         '''
+        already_visited = set(self.lua_pages.get_known_page_addrs())
+        visited = set()
+        if lua_page.addr in already_visited or not self.sanity_check_lua_page(lua_page):
+            return []
+
         if lua_page is not None and self.sanity_check_lua_page(lua_page, max_size=max_size):
             flua_pages = self.walk_lua_page_gcolist_forward(lua_page, max_size=max_size)
             blua_pages = self.walk_lua_page_gcolist_backward(lua_page, max_size=max_size)
-            already_visited = set(self.lua_pages.get_known_page_addrs())
+
             # enumerate any new pages froom the ones that were found
             self.log.debug("Reviewing results and looking for undiscovered links in lists")
             not_visited_pages = set()
+            self.lua_pages.add_page(lua_page)
             for nlp in flua_pages + blua_pages:
+                if not self.sanity_check_lua_page(nlp, max_size=max_size):
+                    visited.add(nlp.addr)
+                    continue
                 if nlp.gcolistprev > 0 and nlp.gcolistprev not in already_visited:
                     not_visited_pages.add(nlp.gcolistprev)
                 if nlp.gcolistnext > 0 and nlp.gcolistnext not in already_visited:
@@ -1246,14 +1262,16 @@ class LuauRobloxAnalysis(Analysis):
                 if nlp.prev > 0 and nlp.prev not in already_visited:
                     not_visited_pages.add(nlp.prev)
 
-            self.lua_pages.add_page(lua_page)
-            already_visited = set(self.lua_pages.get_known_page_addrs())
+
+            already_visited = already_visited | visited
             not_visited_pages = list(not_visited_pages)
             self.log.debug("found {} unvisited lua pages".format(len(not_visited_pages)))
             # performing page discovery on the new pages
             while len(not_visited_pages) > 0:
                 nla = not_visited_pages.pop()
-                already_visited.add(nla)
+                if nla in already_visited or nla in visited:
+                    continue
+                visited.add(nla)
                 if nla == 0 or self.lua_pages.has_page_addr(nla) or not self.valid_vaddr(nla):
                     continue
                 nlp = self.LuaPageCls.from_analysis(nla, analysis=self, safe_load=False)
@@ -1261,9 +1279,8 @@ class LuauRobloxAnalysis(Analysis):
                     continue
                 more_pages = self.walk_lua_pages(nlp)
                 mp = [i.addr for i in more_pages if i.addr not in already_visited]
-                not_visited_pages = not_visited_pages + mp
-
-        return list(self.lua_pages.get_pages())
+                visited = visited | set(mp)
+        return [i for i in self.lua_pages.get_pages() if i.addr in visited]
 
     def find_lua_page_header(self, start_addr=None, allowed_failures=3, stop_addr=None,
                              block_size=32, max_size=DEFAULT_MAX_SIZE) -> LuauRW_lua_Page:
