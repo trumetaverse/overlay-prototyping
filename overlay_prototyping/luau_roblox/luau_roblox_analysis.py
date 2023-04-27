@@ -73,6 +73,8 @@ class LuauRobloxAnalysis(Analysis):
             self.GlobalStateCls = LuauRWB_global_State
             self.LuaPageCls = LuauRWB_lua_Page
 
+        self.state_association = {}
+
     def load_lua_pages(self, luapage_pointers_file=None):
         luapage_pointers_file = self.luapage_pointers_file if luapage_pointers_file is None else luapage_pointers_file
         if luapage_pointers_file is None:
@@ -1612,3 +1614,14 @@ class LuauRobloxAnalysis(Analysis):
         mrs = [i['memory_range'] for i in self.anchor_sections.values()]
         results = [i for i in pot_objects if any([mr.vaddr <= i.addr < mr.vaddr + mr.vsize for mr in mrs])]
         return results
+
+    def associate_thread_and_global_state(self):
+        threads = self.get_threads()
+        for thread in threads.values():
+            gs = getattr(thread, 'global')
+            if gs == 0 or not self.valid_vaddr(gs):
+                self.state_association[gs] = {'global': '', 'thread': thread}
+                continue
+            self.state_association[thread.addr] = {'global': LuauRWB_global_State.from_analysis(gs, self, safe_load=False),
+                                 'thread': thread}
+        return self.state_association
