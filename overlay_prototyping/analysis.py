@@ -20,10 +20,10 @@ class MemRange(object):
             setattr(self, k, v)
 
     def vaddr_in_range(self, vaddr):
-        return self.vaddr <= vaddr and vaddr < self.vaddr + self.vsize
+        return self.vaddr <= vaddr < self.vaddr + self.vsize
 
     def paddr_in_range(self, paddr):
-        return self.paddr <= paddr and paddr < self.paddr + self.size
+        return self.paddr <= paddr < self.paddr + self.size
 
     def convert_paddr_to_vaddr(self, paddr):
         if not self.paddr_in_range(paddr):
@@ -81,7 +81,7 @@ class MemRange(object):
 
     def load_segment_from_file(self, filename, offset=0):
         self.filename = filename
-        fh = open(filename)
+        fh = open(filename, 'rb')
         fh.seek(offset)
         self.data = fh.read(self.size)
         # pad the virtual data
@@ -197,19 +197,19 @@ class MemRanges(object):
     def get_page(self, addr: int):
         return self.page_mask & addr
 
-    def get_memrange_from_vaddr(self, vaddr: int) -> MemRange:
+    def get_memrange_from_vaddr(self, vaddr: int) -> MemRange | None:
         page = self.get_page(vaddr)
         if page in self.vmem_page_lookup:
             return self.vmem_page_lookup[page]
         return None
 
-    def get_memrange_from_paddr(self, paddr: int) -> MemRange:
+    def get_memrange_from_paddr(self, paddr: int) -> MemRange | None:
         page = self.get_page(paddr)
         if page in self.phy_page_lookup:
             return self.phy_page_lookup[page]
         return None
 
-    def convert_paddr_to_vaddr(self, paddr: int) -> int:
+    def convert_paddr_to_vaddr(self, paddr: int) -> int | None:
         mr = self.get_memrange_from_paddr(paddr)
         if mr:
             return mr.convert_paddr_to_vaddr(paddr)
@@ -260,6 +260,7 @@ class MemRanges(object):
     def get_memrange_from_name(self, name):
         return self.range_by_name.get(name, None)
 
+
 class ObjectReference(object):
     def __init__(self, obj):
         self.addr = obj.addr
@@ -274,7 +275,6 @@ class ObjectReference(object):
 
     def get_references(self):
         return self.references
-
 
 
 class ObjectReferences(object):
@@ -343,6 +343,7 @@ class Analysis(object):
         self.radare_file_data = radare_file_data
         self.fh = None
         self.memory_loaded = False
+        self.memory_file = dmp_file
 
         self.object_references = ObjectReferences()
         self.struct_references = ObjectReferences()
@@ -435,18 +436,29 @@ class Analysis(object):
             return self.mem_ranges.get_memrange_from_vaddr(vaddr)
         return self.mem_ranges.get_memrange_from_paddr(paddr)
 
-    def read_uint(self, vaddr, word_sz=4, little_endian=True) -> [int|None]:
+    def read_uint(self, vaddr, word_sz=4, little_endian=True) -> [int | None]:
         e = "<" if little_endian else ">"
         r = "H" if word_sz == 2 else \
             "I" if word_sz == 4 else \
-            "Q"
+                "Q"
         d = self.read_vaddr(vaddr, word_sz)
-        if len(d) != word_sz:
+        if d is None or len(d) != word_sz:
             return None
-        v = struct.unpack(e+r, d)[0]
+        v = struct.unpack(e + r, d)[0]
         return v
 
-    def read_object_ptr(self, addr, cls=None, word_sz=4, little_endian=True) -> [object|None]:
+    def read_ptr(self, vaddr, word_sz=4, little_endian=True) -> [int | None]:
+        e = "<" if little_endian else ">"
+        r = "H" if word_sz == 2 else \
+            "I" if word_sz == 4 else \
+                "Q"
+        d = self.read_vaddr(vaddr, word_sz)
+        if d is None or len(d) != word_sz:
+            return None
+        v = struct.unpack(e + r, d)[0]
+        return v
+
+    def read_object_ptr(self, addr, cls=None, word_sz=4, little_endian=True) -> [object | None]:
         if cls is None:
             return None
         vaddr = self.deref_address(addr, word_sz, little_endian)
@@ -454,13 +466,13 @@ class Analysis(object):
             return None
         return cls.from_analysis(addr, self)
 
-    def deref_address(self, vaddr, word_sz=4, little_endian=True) -> [int|None]:
+    def deref_address(self, vaddr, word_sz=4, little_endian=True) -> [int | None]:
         vaddr_ptr = self.read_uint(vaddr, word_sz, little_endian)
         if vaddr_ptr is None:
             return None
         return self.read_uint(vaddr_ptr, word_sz, little_endian)
 
-    def double_deref_address(self, vaddr, word_sz=4, little_endian=True) -> [int|None]:
+    def double_deref_address(self, vaddr, word_sz=4, little_endian=True) -> [int | None]:
         vaddr_ptr = self.deref_address(vaddr, word_sz, little_endian)
         if vaddr_ptr is None:
             return None
@@ -522,5 +534,5 @@ class Analysis(object):
     def get_struct_addr_references(self, addr):
         return self.struct_references.get_addr_references(addr)
 
-    def add_struct_reference(self, struct_obj):
-        return self.get_struct_addr_references(struct_obj.addr)
+    def add_struct_reference(self, struct_obj, raddr):
+        return self.add_struct_object(struct_obj.addr, raddr)

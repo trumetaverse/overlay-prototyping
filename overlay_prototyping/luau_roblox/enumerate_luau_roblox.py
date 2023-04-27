@@ -18,7 +18,7 @@ class LuauSifterResult(object):
                   "sink_value", "sink_paddr_base", "sink_vaddr_base", "vaddr_base", "paddr_base"
                   ]
 
-    def __init__(self, parse_gc_header=False, **kargs):
+    def __init__(self, **kargs):
         self.paddr = 0
         self.vaddr = 0
         self.paddr_base = 0
@@ -48,9 +48,6 @@ class LuauSifterResult(object):
             self.memcat = (self.sink_value & 0x00ff0000) >> 16
             self.padding = (self.sink_value & 0xff000000) >> 24
 
-        if isinstance(self.sink_value, int) and parse_gc_header:
-            self.gcheader = LuauRW_GCHeader.from_int(self.sink_vaddr, self.sink_value)
-
     def is_valid_gc_header(self) -> bool:
         return self.tt in VALID_OBJ_TYPES and self.marked in VALID_MARKS and self.padding == 0
 
@@ -61,7 +58,7 @@ class LuauSifterResult(object):
     @classmethod
     def from_line(cls, line, parse_gc_header=False):
         r = json.loads(line)
-        return cls(parse_gc_header=parse_gc_header, **r)
+        return cls(**r)
 
     def potential_lua_object(self):
         # return all(v(self) for v in self.)
@@ -157,24 +154,24 @@ class LuauSifterResults(object):
     def get_potential_objects(self) -> list[LuauSifterResult]:
         return sorted(self.all_pot_gco.values(), key=lambda x: x.sink_vaddr)
 
-    def parse_line(self, line, parse_gc_header=False) -> LuauSifterResult:
-        r = LuauSifterResult.from_line(line, parse_gc_header=parse_gc_header)
+    def parse_line(self, line) -> LuauSifterResult:
+        r = LuauSifterResult.from_line(line)
         if r.potential_lua_object():
             self.add_pot_gco_sifter_result(r)
         else:
             self.add_pot_structure_sifter_result(r)
         return r
 
-    def parse_file(self, filename, parse_gc_header=False, bulk_load=True, callback=None):
+    def parse_file(self, filename, bulk_load=True, callback=None):
         fh = open(filename)
         if bulk_load:
             data = fh.readlines()
             for line in data:
-                self.parse_line(line, parse_gc_header=parse_gc_header)
+                self.parse_line(line)
         else:
             cnt = 0
             for line in fh:
-                self.parse_line(line, parse_gc_header=parse_gc_header)
+                self.parse_line(line)
                 cnt += 1
 
         if callback:
