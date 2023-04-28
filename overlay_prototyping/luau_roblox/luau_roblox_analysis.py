@@ -1395,6 +1395,8 @@ class LuauRobloxAnalysis(Analysis):
                 self.log.debug(
                     "Scanning lua_Page {:08x} of size: {} for tvalues".format(lp.addr, lp.pageSize))
                 x = self.scan_lua_page_tvalue(lp, add_obj=add_obj)
+                self.log.debug(
+                    "lua_Page {:08x} found {} GCOs and found {} tvalues".format(lp.addr, len(x['pot_gco']), len(x['pot_tval'])))
                 pot_gco.update(x['pot_gco'])
                 pot_tval.update(x['pot_tval'])
                 for tt in x['pot_tt'].keys():
