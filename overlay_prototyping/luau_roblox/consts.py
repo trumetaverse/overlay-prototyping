@@ -271,7 +271,7 @@ LUA_TAG_TYPES = {
     TVECTOR: "vector",
     TSTRING: "string",
     TTABLE: "table",
-    TCLOSURE: "function",
+    TCLOSURE: "closure",
     TUSERDATA: "userdata",
     TTHREAD: "thread",
 }

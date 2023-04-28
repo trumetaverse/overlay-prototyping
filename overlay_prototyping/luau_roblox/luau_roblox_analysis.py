@@ -1344,7 +1344,7 @@ class LuauRobloxAnalysis(Analysis):
         offset = lua_page.freeNext + lua_page.get_offset('data') + lua_page.blockSize
         return lua_page.addr + offset
 
-    def find_tvalues_in_lua_pages(self, add_obj=False, num_threads=None, pot_gco=None, pot_tval=None, pot_tt=None):
+    def scan_lua_pages_tvalue(self, add_obj=False, num_threads=None, pot_gco=None, pot_tval=None, pot_tt=None):
         lua_pages = self.lua_pages.get_pages()
         pot_gco = {} if pot_gco is None else pot_gco
         pot_tval = {} if pot_tval is None else pot_tval
@@ -1358,7 +1358,7 @@ class LuauRobloxAnalysis(Analysis):
                 lp = lua_pages.pop(0)
                 cnt += 1
                 self.log.debug("Processing {} of {} lua_Pages ".format(cnt, num_lps))
-                t = Thread(target=self.find_tvalues_in_lua_page,
+                t = Thread(target=self.scan_lua_page_tvalue,
                            args=(lp,),
                            kwargs={'pot_gco': pot_gco, 'pot_tval': pot_tval, 'pot_tt': pot_tt, 'add_obj': add_obj})
                 t.start()
@@ -1394,7 +1394,7 @@ class LuauRobloxAnalysis(Analysis):
             for lp in lua_pages:
                 self.log.debug(
                     "Scanning lua_Page {:08x} of size: {} for tvalues".format(lp.addr, lp.pageSize))
-                x = self.find_tvalues_in_lua_page(lp, add_obj=add_obj)
+                x = self.scan_lua_page_tvalue(lp, add_obj=add_obj)
                 pot_gco.update(x['pot_gco'])
                 pot_tval.update(x['pot_tval'])
                 for tt in x['pot_tt'].keys():
@@ -1444,7 +1444,7 @@ class LuauRobloxAnalysis(Analysis):
         #                                                                                     len(pot_gco)))
         return results
 
-    def find_tvalues_in_lua_page(self, lp: LuauRW_lua_Page|LuauRWB_lua_Page, add_obj=False, pot_gco=None, pot_tval=None, pot_tt=None):
+    def scan_lua_page_tvalue(self, lp: LuauRW_lua_Page | LuauRWB_lua_Page, add_obj=False, pot_gco=None, pot_tval=None, pot_tt=None):
         pot_gco = {} if pot_gco is None else pot_gco
         pot_tval = {} if pot_tval is None else pot_tval
         pot_tt = {k: [] for k in LUA_TAG_TYPES} if pot_tt is None else pot_tt
