@@ -74,6 +74,7 @@ class LuauRobloxAnalysis(Analysis):
             self.LuaPageCls = LuauRWB_lua_Page
 
         self.state_association = {}
+        self.free_blocks = {}
 
     def load_lua_pages(self, luapage_pointers_file=None):
         luapage_pointers_file = self.luapage_pointers_file if luapage_pointers_file is None else luapage_pointers_file
@@ -237,7 +238,7 @@ class LuauRobloxAnalysis(Analysis):
     def is_sift_results_loaded(self) -> bool:
         return self.sift_results_loaded
 
-    def scan_lua_pages_gco(self, add_obj=False) -> [
+    def scan_lua_pages_gco(self, add_obj=False, scan_entire_block=False) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
         LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         lpages = self.lua_pages.get_pages()
@@ -257,7 +258,7 @@ class LuauRobloxAnalysis(Analysis):
             lpage_start = lpage.addr
             lpage_end = lpage.addr + 24 + lpage.pageSize
             checked.append([lpage_start, lpage_end])
-            r = self.scan_lua_page_gco(lpage=lpage, add_obj=add_obj)
+            r = self.scan_lua_page_gco(lpage=lpage, add_obj=add_obj, scan_entire_block=scan_entire_block)
             if len(r) > 0:
                 self.log.debug("Found {} new objects in lua_Page @ 0x{:08x} ".format(len(r), lpage.addr))
                 objs = objs + r
@@ -269,7 +270,7 @@ class LuauRobloxAnalysis(Analysis):
         return objs
 
     def scan_block_for_gco(self, block_addr, block_size, add_obj=False, printable_strings=True, incr=4,
-                           tables=None) -> [
+                           tables=None, scan_entire_block=False) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
         LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
 
@@ -296,10 +297,12 @@ class LuauRobloxAnalysis(Analysis):
                 gco = self.get_lua_object(gco_addr)
                 incr = gco.get_total_size()
                 objs.append(gco)
+            if not scan_entire_block:
+                break
             gco_addr += incr
         return objs
 
-    def scan_lua_page_gco(self, addr=None, lpage=None, add_obj=False, printable_strings=True, incr=4) -> [
+    def scan_lua_page_gco(self, addr=None, lpage=None, add_obj=False, printable_strings=True, incr=4, scan_entire_block=False) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
         LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         objs = []
@@ -340,9 +343,12 @@ class LuauRobloxAnalysis(Analysis):
             # if value is None:
             #     continue
             if value is not None and self.valid_vaddr(value) and value == lpage.addr:
-                offset = -8
+                self.free_blocks[block_addr] = lpage
+                self.log.debug(
+                    "Block {:08x} in lua_Page {:08x} has been freed".format(block_addr, lpage.addr))
+                break
             _objs = self.scan_block_for_gco(block_addr + offset, block_size + offset, add_obj=add_obj,
-                                            printable_strings=printable_strings, incr=incr, tables=tables)
+                                            printable_strings=printable_strings, incr=incr, tables=tables, scan_entire_block=scan_entire_block)
         return objs
 
     def sift_results_load_complete(self) -> dict:
@@ -662,7 +668,7 @@ class LuauRobloxAnalysis(Analysis):
                 continue
             elif not self.valid_vaddr(obj.env):
                 continue
-            gco = self.read_gco(obj.env, TTABLE, caution=False)
+            gco = self.read_gco(obj.env, tt=TTABLE, add_obj=True, caution=False)
             if gco is None:
                 continue
             dt[gco.addr] = gco
@@ -705,13 +711,22 @@ class LuauRobloxAnalysis(Analysis):
             tables = self.potentials_tables(sanity_check=True, add_obj=add_obj)
         dtables = {t.addr: t for t in tables}
         for obj in dt.values():
+            # handle gt if its NULL, we just accept it, otherwise try to associate with a Lua Table
+            gt_valid = obj.gt == 0
+            if not gt_valid and self.valid_vaddr(obj.gt):
+                gco = self.get_gco(obj.gt)
+                gt_valid = isinstance(gco, LuauRWB_Table) or isinstance(gco, LuauRW_Table)
+                if not gt_valid and self.valid_vaddr(obj.gt):
+                    gco = self.read_gco(obj.gt, tt=TTABLE, add_obj=True, caution=False)
+                    gt_valid = gco is not None
+
             global_state = self.valid_vaddr(getattr(obj, 'global'))
             call_info = self.valid_vaddr(obj.ci)
             stack = self.valid_vaddr(obj.stack)
             stack_last = self.valid_vaddr(obj.stack_last)
             # relaxing the check on the global table.  may not be known
-            gt = True # obj.gt == 0 or self.valid_vaddr(obj.gt) and obj.gt in dtables
-            all_checks = [global_state, call_info, stack, stack_last, gt]
+
+            all_checks = [global_state, call_info, stack, stack_last, gt_valid]
             if all(all_checks):
                 threads.append(obj)
         if add_obj:
@@ -1429,7 +1444,7 @@ class LuauRobloxAnalysis(Analysis):
         #                                                                                     len(pot_gco)))
         return results
 
-    def find_tvalues_in_lua_page(self, lp: LuauRW_lua_Page, add_obj=False, pot_gco=None, pot_tval=None, pot_tt=None):
+    def find_tvalues_in_lua_page(self, lp: LuauRW_lua_Page|LuauRWB_lua_Page, add_obj=False, pot_gco=None, pot_tval=None, pot_tt=None):
         pot_gco = {} if pot_gco is None else pot_gco
         pot_tval = {} if pot_tval is None else pot_tval
         pot_tt = {k: [] for k in LUA_TAG_TYPES} if pot_tt is None else pot_tt
@@ -1458,13 +1473,14 @@ class LuauRobloxAnalysis(Analysis):
             "Scanning {} ({} size) blocks in lua_Page {:08x} tvalues".format(len(block_addrs), block_size, lp.addr))
         for block_addr in block_addrs:
             # first 8 bytes of a block are metadata that point to the top of the page
-            if not self.valid_vaddr(block_addr):
-                self.log.debug(
-                    "Block address 0x{:08x} in lua_Page: 0x{:08x} is invalid".format(block_addr, lp.addr))
-                continue
+            # if not self.valid_vaddr(block_addr):
+            #     self.log.debug(
+            #         "Block address 0x{:08x} in lua_Page: 0x{:08x} is invalid".format(block_addr, lp.addr))
+            #     continue
             offset = 0
             value = self.read_ptr(block_addr, word_sz=self.word_sz)
             if value is not None and self.valid_vaddr(value) and value == lp.addr:
+                self.free_blocks[block_addr] = lp
                 offset = -8
             _ = self.scan_block_for_tval(block_addr + offset, block_size + offset, add_obj=add_obj, pot_gco=pot_gco,
                                          pot_tt=pot_tt,
