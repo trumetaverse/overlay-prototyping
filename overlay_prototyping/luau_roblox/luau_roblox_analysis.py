@@ -285,7 +285,8 @@ class LuauRobloxAnalysis(Analysis):
                     gco_addr += incr
                     continue
 
-                r = [gco]
+                if gco is not None:
+                    r = [gco]
                 if do_sanity_check:
                     r = self.sanity_check(gco, add_obj=add_obj, printable_strings=printable_strings, tables=tables)
                 if isinstance(r, list) and len(r) > 0:
@@ -1437,7 +1438,8 @@ class LuauRobloxAnalysis(Analysis):
                 if tvalue is not None:
                     gco = self.read_gco(tvalue.value.gc)
 
-                r = [gco]
+                if gco is not None:
+                    r = [gco]
                 if do_sanity_check:
                     r = self.sanity_check(gco, add_obj=add_obj, printable_strings=printable_strings, tables=tables)
                 if gco is not None and len(r) > 0:
