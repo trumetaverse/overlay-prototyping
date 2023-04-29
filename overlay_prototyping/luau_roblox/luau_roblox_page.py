@@ -46,6 +46,12 @@ class LuaPage(object):
     def add_tvalue(self, tvalue):
         self.objects[tvalue.addr] = tvalue
 
+    def get_block_addrs(self):
+        block_size = self.lpage.blockSize
+        data_start = self.lpage.addr_of('data')
+        data_end = self.lpage.addr + self.lpage.pageSize
+        return [i for i in range(data_start, data_end, block_size) if data_start <= i < data_end]
+
 
 class LuaPages(object):
     def __init__(self):
@@ -87,7 +93,8 @@ class LuaPages(object):
             return False
         lp = self.get_page_with_addr(vaddr)
         if lp:
-            lp.add_tvalue(tvalue)
+            luapage = self.lpages[lp.addr]
+            luapage.add_tvalue(tvalue)
             return True
         return False
 
