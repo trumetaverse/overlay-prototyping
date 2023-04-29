@@ -285,9 +285,10 @@ class LuauRobloxAnalysis(Analysis):
                     gco_addr += incr
                     continue
 
+                r = []
                 if gco is not None:
                     r = [gco]
-                if do_sanity_check:
+                if gco is not None and do_sanity_check:
                     r = self.sanity_check(gco, add_obj=add_obj, printable_strings=printable_strings, tables=tables)
                 if isinstance(r, list) and len(r) > 0:
                     # self.log.debug("Found new gco @ 0x{:08x} tt: {} ".format(gco_addr, gco.tt))
@@ -1412,8 +1413,8 @@ class LuauRobloxAnalysis(Analysis):
                     pot_tt[tt] = pot_tt[tt] + x['pot_tt'][tt]
         return results
 
-    def scan_block_for_tval(self, block_addr, block_size, add_obj=False, printable_strings=True, incr=4, tables=None,
-                            pot_gco=None, pot_tt=None, pot_tval=None, parse_bare_pointers=False, do_sanity_check=True) -> [
+    def scan_block_for_tvalue(self, block_addr, block_size, add_obj=False, printable_strings=True, incr=4, tables=None,
+                              pot_gco=None, pot_tt=None, pot_tval=None, parse_bare_pointers=False, do_sanity_check=True) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
 
         # tables = tables if isinstance(tables, list) else []
@@ -1438,11 +1439,12 @@ class LuauRobloxAnalysis(Analysis):
                 if tvalue is not None:
                     gco = self.read_gco(tvalue.value.gc)
 
+                r = []
                 if gco is not None:
                     r = [gco]
-                if do_sanity_check:
+                if gco is not None and do_sanity_check:
                     r = self.sanity_check(gco, add_obj=add_obj, printable_strings=printable_strings, tables=tables)
-                if gco is not None and len(r) > 0:
+                if isinstance(r, list) and len(r) > 0:
                     incr = ctypes.sizeof(self.TValueCls)
                     if a_lp is not None:
                         a_lp.add_obj(gco)
@@ -1497,9 +1499,9 @@ class LuauRobloxAnalysis(Analysis):
             if value is not None and self.valid_vaddr(value) and value == lp.addr:
                 self.free_blocks[block_addr] = lp
                 offset = -8
-            _ = self.scan_block_for_tval(block_addr + offset, block_size + offset, add_obj=add_obj, pot_gco=pot_gco,
-                                         pot_tt=pot_tt,
-                                         pot_tval=pot_tval)
+            _ = self.scan_block_for_tvalue(block_addr + offset, block_size + offset, add_obj=add_obj, pot_gco=pot_gco,
+                                           pot_tt=pot_tt,
+                                           pot_tval=pot_tval)
         return results
 
     def get_state(self):
