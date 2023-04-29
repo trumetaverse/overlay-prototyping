@@ -915,7 +915,7 @@ class LuauRW_lua_State(LuauRW_BaseStruct):
 
         "top": {"type": "c_uint32"},
         "base": {"type": "c_uint32"},
-        "global": {"type": "c_uint32"},
+        "global_State": {"type": "c_uint32"},
         "ci": {"type": "c_uint32"},
         "stack_last": {"type": "c_uint32"},
         "stack": {"type": "c_uint32"},

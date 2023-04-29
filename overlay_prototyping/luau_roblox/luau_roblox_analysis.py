@@ -727,7 +727,7 @@ class LuauRobloxAnalysis(Analysis):
                     gco = self.read_gco(obj.gt, tt=TTABLE, add_obj=True, caution=False)
                     gt_valid = gco is not None
 
-            global_state = getattr(obj, 'global') == 0 or self.valid_vaddr(getattr(obj, 'global'))
+            global_state = getattr(obj, 'global_State') == 0 or self.valid_vaddr(getattr(obj, 'global_State'))
             call_info = obj.ci == 0 or self.valid_vaddr(obj.ci)
             stack = obj.stack == 0 or self.valid_vaddr(obj.stack)
             stack_last = obj.stack_last == 0 or self.valid_vaddr(obj.stack_last)
@@ -844,8 +844,8 @@ class LuauRobloxAnalysis(Analysis):
     def find_potential_global_state(self, pot_threads=None) -> dict[LuauRW_global_State | LuauRWB_global_State]:
         globals_results = {}
         pot_threads = self.potentials_threads() if pot_threads is None else pot_threads
-        gs_addrs = {getattr(i, 'global'): i for i in pot_threads if
-                    i is not None and self.valid_vaddr(getattr(i, 'global'))}
+        gs_addrs = {getattr(i, 'global_State'): i for i in pot_threads if
+                    i is not None and self.valid_vaddr(getattr(i, 'global_State'))}
 
         global_states = [self.GlobalStateCls.from_analysis(i, self, safe_load=False) for i in gs_addrs]
         global_states = [i for i in global_states if i is not None]
@@ -1668,10 +1668,10 @@ class LuauRobloxAnalysis(Analysis):
     def associate_thread_and_global_state(self):
         threads = self.get_threads()
         for thread in threads.values():
-            gs = getattr(thread, 'global')
+            gs = getattr(thread, 'global_State')
             if gs == 0 or not self.valid_vaddr(gs):
-                self.state_association[gs] = {'global': '', 'thread': thread}
+                self.state_association[gs] = {'global_State': '', 'thread': thread}
                 continue
-            self.state_association[thread.addr] = {'global': LuauRWB_global_State.from_analysis(gs, self, safe_load=False),
+            self.state_association[thread.addr] = {'global_State': LuauRWB_global_State.from_analysis(gs, self, safe_load=False),
                                  'thread': thread}
         return self.state_association
