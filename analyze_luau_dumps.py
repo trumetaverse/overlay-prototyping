@@ -22,12 +22,14 @@ def init_logger(name=LOGGER_NAME,
                 log_file=LOG_FILE):
     global LOGGER
     logging.getLogger(name).setLevel(log_level)
+    formatter = logging.Formatter(logging_fmt)
     ch = logging.StreamHandler(sys.stdout)
     ch.setLevel(log_level)
-    formatter = logging.Formatter(logging_fmt)
     ch.setFormatter(formatter)
     logging.getLogger(name).addHandler(ch)
     fh = logging.FileHandler(log_file)
+    fh.setFormatter(formatter)
+    fh.setLevel(log_level)
     logging.getLogger(name).addHandler(fh)
     LOGGER = logging.getLogger(name)
     return logging.getLogger(name)
@@ -35,7 +37,7 @@ def init_logger(name=LOGGER_NAME,
 
 BASE_DIR = "E:/dumps/2023-04-28/"
 BINS_DIR = os.path.join(BASE_DIR, 'bins')
-MEMS_DIR = os.path.join(BASE_DIR, 'mems')
+MEMS_DIR = os.path.join(BASE_DIR, 'mem')
 SEARCHES_DIR = os.path.join(BASE_DIR, 'searches')
 DUMP_EXT = 'DMP'
 
@@ -104,6 +106,7 @@ def wrapper(bin_name):
 
 
 def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_pointers=False):
+    print("here", bin_name, byfron_analysis, do_return, load_pointers)
     dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
     pointers_file = POINTERS_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
     lua_pointers_file = LUAPAGE_POINTER_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
