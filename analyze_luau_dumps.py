@@ -5,6 +5,7 @@ import multiprocessing as mp
 import asyncio
 import sys
 import logging
+import threading
 
 from overlay_prototyping.luau_roblox.luau_roblox_analysis import LuauRobloxAnalysis
 
@@ -60,12 +61,13 @@ FULL_EXTRACTED_GAME_ASSETS_BASE = "{base_dir}/{bin_name}/extracted_assets/full/"
 PARSE_EXTRACTED_GAME_ASSETS_BASE = "{base_dir}/{bin_name}/extracted_assets/parse/"
 
 
-async def extract_assets(asset_info_file, dmp_file, output_dir):
+def extract_assets(asset_info_file, dmp_file, output_dir):
+    print("Executing extract assets: {}".format(output_dir))
     dmp = open(dmp_file, 'rb')
     try:
         os.stat(output_dir)
     except:
-        os.mkdir(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
 
     for asset in [json.loads(line) for line in open(asset_info_file).readlines()]:
         dmp.seek(0)
@@ -77,32 +79,38 @@ async def extract_assets(asset_info_file, dmp_file, output_dir):
         data = dmp.read(size)
         open(fname, 'wb').write(data)
 
+    print("Completed executing extract assets: {}".format(output_dir))
 
-async def full_extract_downloaded_assets(bin_name):
+
+def full_extract_downloaded_assets(bin_name):
     asset_info_file = IDENTIFIED_OBJECTS_FULL_FMT.format(**{"base_dir": SEARCHES_DIR, "bin_name": bin_name})
     dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
     output_dir = FULL_EXTRACTED_GAME_ASSETS_BASE.format(**{"base_dir": SEARCHES_DIR, "bin_name": bin_name})
-    await extract_assets(asset_info_file, dmp_file, output_dir)
+    extract_assets(asset_info_file, dmp_file, output_dir)
 
 
-async def parse_extract_downloaded_assets(bin_name):
+def parse_extract_downloaded_assets(bin_name):
     asset_info_file = IDENTIFIED_OBJECTS_PARSE_FMT.format(**{"base_dir": SEARCHES_DIR, "bin_name": bin_name})
     dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
     output_dir = PARSE_EXTRACTED_GAME_ASSETS_BASE.format(**{"base_dir": SEARCHES_DIR, "bin_name": bin_name})
-    await extract_assets(asset_info_file, dmp_file, output_dir)
+    extract_assets(asset_info_file, dmp_file, output_dir)
+
+def wrapper(bin_name):
+    t1 = threading.Thread(target=parse_extract_downloaded_assets, args=(bin_name,))
+    t1.start()
+    t2 = threading.Thread(target=full_extract_downloaded_assets, args=(bin_name,))
+    t2.start()
+    return [t1, t2]
 
 
-def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_pointers=load_pointers):
+def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_pointers=False):
     dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
     pointers_file = POINTERS_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
     lua_pointers_file = LUAPAGE_POINTER_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
     radare_memory_info_file = MEMORY_INFO_FMT.format(**{"base_dir": MEMS_DIR, 'bin_name': bin_name})
     saved_state = SAVED_OBJECTS_FILE.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
-    loop = asyncio.get_event_loop()
-    tasks = [
-        loop.create_task(parse_extract_downloaded_assets(bin_name)),
-        loop.create_task(full_extract_downloaded_assets(bin_name)),
-    ]
+
+    threads = wrapper(bin_name)
 
     analysis = LuauRobloxAnalysis(dmp_file=dmp_file,
                                   radare_file_data=radare_memory_info_file,
@@ -115,7 +123,7 @@ def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_
     if load_pointers:
         analysis.load_sift_results()
     analysis.save_state(saved_state)
-    loop.run_until_complete(asyncio.wait(tasks))
+    [t.join() for t in threads]
     if do_return:
         return analysis
     else:
@@ -142,7 +150,6 @@ def main(bin_name=None, num_jobs=None, load_pointers=False):
     LOGGER.info("starting the extraction process for: {}".format(bin_name if bin_name else ", ".join(bin_names)))
     analysis = None
 
-
     if bin_names is None and bin_name is None:
         raise Exception("No bin_name specified for analysis")
 
@@ -151,7 +158,8 @@ def main(bin_name=None, num_jobs=None, load_pointers=False):
         TOTAL = len(bin_names)
         with mp.Pool(num_jobs) as pool:
             for bin in bin_names:
-                pool.apply_async(extract_relevant_data, args=(bin,), kwds={'load_pointers': load_pointers}, callback=log_completion)
+                pool.apply_async(extract_relevant_data, args=(bin,), kwds={'load_pointers': load_pointers},
+                                 callback=log_completion)
             pool.close()
             pool.join()
         return analysis
@@ -195,10 +203,12 @@ if __name__ == "__main__":
 
     bin_name = args.bin
     num_jobs = args.mp
+    load_pointers = args.load_pointers
     LOGGER.info("[+++] Starting analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}".format(args.dir, bin_name,
                                                                                                      num_jobs,
-                                                                                                     args.load_pointers))
-    main(bin_name=bin_name, num_jobs=num_jobs, load_pointers=args.load_pointers)
-    LOGGER.info("[===] Completed analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}".format(args.dir, bin_name,
-                                                                                                     num_jobs,
-                                                                                                     args.load_pointers))
+                                                                                                     load_pointers))
+    main(bin_name=bin_name, num_jobs=num_jobs, load_pointers=load_pointers)
+    LOGGER.info(
+        "[===] Completed analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}".format(args.dir, bin_name,
+                                                                                              num_jobs,
+                                                                                              load_pointers))
