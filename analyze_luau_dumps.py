@@ -36,17 +36,18 @@ BASE_DIR = "E:/dumps/2023-04-28/"
 BINS_DIR = os.path.join(BASE_DIR, 'bins')
 MEMS_DIR = os.path.join(BASE_DIR, 'mems')
 SEARCHES_DIR = os.path.join(BASE_DIR, 'searches')
+DUMP_EXT = 'DMP'
 
 
 def reset_global_deps(base_dir):
     global BASE_DIR, BINS_DIR, MEMS_DIR, SEARCHES_DIR
     BASE_DIR = base_dir
     BINS_DIR = os.path.join(BASE_DIR, 'bins')
-    MEMS_DIR = os.path.join(BASE_DIR, 'mems')
+    MEMS_DIR = os.path.join(BASE_DIR, 'mem')
     SEARCHES_DIR = os.path.join(BASE_DIR, 'searches')
 
 
-DUMP_FMT = "{base_dir}/{bin_name}.dmp"
+DUMP_FMT = "{base_dir}/{bin_name}.{dmp_ext}"
 LUAPAGE_POINTER_FMT = "{base_dir}/{bin_name}/luapage_comments.json"
 POINTERS_FMT = "{base_dir}/{bin_name}/pointer_comments.json"
 MEMORY_INFO_FMT = "{base_dir}/{bin_name}.json"
@@ -79,20 +80,20 @@ async def extract_assets(asset_info_file, dmp_file, output_dir):
 
 async def full_extract_downloaded_assets(bin_name):
     asset_info_file = IDENTIFIED_OBJECTS_FULL_FMT.format(**{"base_dir": SEARCHES_DIR, "bin_name": bin_name})
-    dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name})
+    dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
     output_dir = FULL_EXTRACTED_GAME_ASSETS_BASE.format(**{"base_dir": SEARCHES_DIR, "bin_name": bin_name})
     await extract_assets(asset_info_file, dmp_file, output_dir)
 
 
 async def parse_extract_downloaded_assets(bin_name):
     asset_info_file = IDENTIFIED_OBJECTS_PARSE_FMT.format(**{"base_dir": SEARCHES_DIR, "bin_name": bin_name})
-    dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name})
+    dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
     output_dir = PARSE_EXTRACTED_GAME_ASSETS_BASE.format(**{"base_dir": SEARCHES_DIR, "bin_name": bin_name})
     await extract_assets(asset_info_file, dmp_file, output_dir)
 
 
-def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False):
-    dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name})
+def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_pointers=load_pointers):
+    dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
     pointers_file = POINTERS_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
     lua_pointers_file = LUAPAGE_POINTER_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
     radare_memory_info_file = MEMORY_INFO_FMT.format(**{"base_dir": MEMS_DIR, 'bin_name': bin_name})
@@ -107,11 +108,12 @@ def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False):
                                   radare_file_data=radare_memory_info_file,
                                   sift_results=pointers_file,
                                   luapage_pointers_file=lua_pointers_file,
-                                  byfron_analysis=True)
+                                  byfron_analysis=byfron_analysis)
     analysis.load_lua_pages()
     lpscan_results = analysis.scan_lua_pages_gco(add_obj=True)
     tvals = analysis.scan_lua_pages_tvalue(add_obj=True)
-    # analysis.load_sift_results()
+    if load_pointers:
+        analysis.load_sift_results()
     analysis.save_state(saved_state)
     loop.run_until_complete(asyncio.wait(tasks))
     if do_return:
@@ -130,27 +132,33 @@ def log_completion(bin_name):
     LOGGER.info("Completed {} of {}, parallel extraction for {}".format(CNT, TOTAL, bin_name))
 
 
-def main(bin_name=None, num_jobs=None):
+def main(bin_name=None, num_jobs=None, load_pointers=False):
     global TOTAL
     bin_names = None
     if bin_name is None:
         bin_names = [os.path.splitext(i)[0] for i in os.listdir(BINS_DIR)]
-
+    elif isinstance(num_jobs, int) and bin_names is None and bin_name is not None:
+        bin_names = [bin_name]
     LOGGER.info("starting the extraction process for: {}".format(bin_name if bin_name else ", ".join(bin_names)))
     analysis = None
+
+
+    if bin_names is None and bin_name is None:
+        raise Exception("No bin_name specified for analysis")
+
     if isinstance(num_jobs, int) and isinstance(bin_names, list):
         LOGGER.info("performing extraction in parallel with {} jobs".format(num_jobs))
         TOTAL = len(bin_names)
         with mp.Pool(num_jobs) as pool:
-            for bin_name in bin_names:
-                pool.apply_async(extract_relevant_data, args=(bin_name,), callback=log_completion)
+            for bin in bin_names:
+                pool.apply_async(extract_relevant_data, args=(bin,), kwds={'load_pointers': load_pointers}, callback=log_completion)
             pool.close()
             pool.join()
         return analysis
 
     elif bin_name is not None:
         LOGGER.info("performing single extraction for {}".format(bin_name))
-        analysis = extract_relevant_data(bin_name, do_return=True)
+        analysis = extract_relevant_data(bin_name, do_return=True, load_pointers=load_pointers)
         LOGGER.info("Completed single extraction for {}".format(bin_name))
     elif bin_names is not None:
         cnt = len(bin_names)
@@ -160,7 +168,7 @@ def main(bin_name=None, num_jobs=None):
             do_return = len(bin_names) == 0  # last bin_name in list
             LOGGER.info(
                 "Completed {} of {}, performing serial extraction extraction for {}".format(completed, cnt, bin_name))
-            analysis = extract_relevant_data(bin_name, do_return=do_return)
+            analysis = extract_relevant_data(bin_name, do_return=do_return, load_pointers=load_pointers)
             LOGGER.info("Completed single extraction for {}".format(bin_name))
     return analysis
 
@@ -172,11 +180,14 @@ parser = argparse.ArgumentParser(
 parser.add_argument('-b', '--bin', help='analyze only the bin_name', type=str, default=None)
 parser.add_argument('-d', '--dir', help='base directory for analysis', type=str, required=True)
 parser.add_argument('-m', '--mp', help='number of concurrent processes', type=int, default=None)
+parser.add_argument('-e', '--dmp_ext', help='extension of the dump file', type=str, default=DUMP_EXT)
+parser.add_argument('-p', '--load_pointers', help='extension of the dump file', action="store_true", default=False)
 
 if __name__ == "__main__":
     init_logger()
     args = parser.parse_args()
 
+    DUMP_EXT = args.dmp_ext
     if args.dir:
         reset_global_deps(args.dir)
     else:
@@ -184,4 +195,10 @@ if __name__ == "__main__":
 
     bin_name = args.bin
     num_jobs = args.mp
-    main(bin_name=bin_name, num_jobs=num_jobs)
+    LOGGER.info("[+++] Starting analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}".format(args.dir, bin_name,
+                                                                                                     num_jobs,
+                                                                                                     args.load_pointers))
+    main(bin_name=bin_name, num_jobs=num_jobs, load_pointers=args.load_pointers)
+    LOGGER.info("[===] Completed analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}".format(args.dir, bin_name,
+                                                                                                     num_jobs,
+                                                                                                     args.load_pointers))
