@@ -6,6 +6,7 @@ import asyncio
 import sys
 import logging
 import threading
+import time
 
 from overlay_prototyping.luau_roblox.luau_roblox_analysis import LuauRobloxAnalysis
 
@@ -105,7 +106,7 @@ def wrapper(bin_name):
     return [t1, t2]
 
 
-def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_pointers=False):
+def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_pointers=False, scan=True):
     print("here", bin_name, byfron_analysis, do_return, load_pointers)
     dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
     pointers_file = POINTERS_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
@@ -121,10 +122,15 @@ def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_
                                   luapage_pointers_file=lua_pointers_file,
                                   byfron_analysis=byfron_analysis)
     analysis.load_lua_pages()
-    lpscan_results = analysis.scan_lua_pages_gco(add_obj=True)
-    tvals = analysis.scan_lua_pages_tvalue(add_obj=True)
+    if scan:
+        lpscan_results = analysis.scan_lua_pages_gco(add_obj=True)
+        tvals = analysis.scan_lua_pages_tvalue(add_obj=True)
     if load_pointers:
         analysis.load_sift_results()
+        while True:
+            if analysis.check_results_status() and analysis.check_analysis_status():
+                break
+            time.sleep(.5)
     analysis.save_state(saved_state)
     [t.join() for t in threads]
     if do_return:
@@ -143,7 +149,7 @@ def log_completion(bin_name):
     LOGGER.info("Completed {} of {}, parallel extraction for {}".format(CNT, TOTAL, bin_name))
 
 
-def main(bin_name=None, num_jobs=None, load_pointers=False):
+def main(bin_name=None, num_jobs=None, load_pointers=False, scan=True):
     global TOTAL
     bin_names = None
     if bin_name is None:
@@ -161,7 +167,7 @@ def main(bin_name=None, num_jobs=None, load_pointers=False):
         TOTAL = len(bin_names)
         with mp.Pool(num_jobs) as pool:
             for bin in bin_names:
-                pool.apply_async(extract_relevant_data, args=(bin,), kwds={'load_pointers': load_pointers},
+                pool.apply_async(extract_relevant_data, args=(bin,), kwds={'load_pointers': load_pointers, "scan": scan},
                                  callback=log_completion)
             pool.close()
             pool.join()
@@ -169,7 +175,7 @@ def main(bin_name=None, num_jobs=None, load_pointers=False):
 
     elif bin_name is not None:
         LOGGER.info("performing single extraction for {}".format(bin_name))
-        analysis = extract_relevant_data(bin_name, do_return=True, load_pointers=load_pointers)
+        analysis = extract_relevant_data(bin_name, do_return=True, load_pointers=load_pointers, scan=scan)
         LOGGER.info("Completed single extraction for {}".format(bin_name))
     elif bin_names is not None:
         cnt = len(bin_names)
@@ -179,7 +185,7 @@ def main(bin_name=None, num_jobs=None, load_pointers=False):
             do_return = len(bin_names) == 0  # last bin_name in list
             LOGGER.info(
                 "Completed {} of {}, performing serial extraction extraction for {}".format(completed, cnt, bin_name))
-            analysis = extract_relevant_data(bin_name, do_return=do_return, load_pointers=load_pointers)
+            analysis = extract_relevant_data(bin_name, do_return=do_return, load_pointers=load_pointers, scan=scan)
             LOGGER.info("Completed single extraction for {}".format(bin_name))
     return analysis
 
@@ -193,6 +199,7 @@ parser.add_argument('-d', '--dir', help='base directory for analysis', type=str,
 parser.add_argument('-m', '--mp', help='number of concurrent processes', type=int, default=None)
 parser.add_argument('-e', '--dmp_ext', help='extension of the dump file', type=str, default=DUMP_EXT)
 parser.add_argument('-p', '--load_pointers', help='extension of the dump file', action="store_true", default=False)
+parser.add_argument('-s', '--scan', help='scan for tvalues and gcos', action="store_true", default=False)
 
 if __name__ == "__main__":
     init_logger()
@@ -207,11 +214,14 @@ if __name__ == "__main__":
     bin_name = args.bin
     num_jobs = args.mp
     load_pointers = args.load_pointers
-    LOGGER.info("[+++] Starting analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}".format(args.dir, bin_name,
+    scan = args.scan
+    LOGGER.info("[+++] Starting analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}, scan: {}".format(args.dir, bin_name,
                                                                                                      num_jobs,
-                                                                                                     load_pointers))
-    main(bin_name=bin_name, num_jobs=num_jobs, load_pointers=load_pointers)
+                                                                                                     load_pointers,
+                                                                                                     scan))
+    main(bin_name=bin_name, num_jobs=num_jobs, load_pointers=load_pointers, scan=scan)
     LOGGER.info(
-        "[===] Completed analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}".format(args.dir, bin_name,
+        "[===] Completed analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{} scan:{}".format(args.dir, bin_name,
                                                                                               num_jobs,
-                                                                                              load_pointers))
+                                                                                              load_pointers,
+                                                                                              scan))
