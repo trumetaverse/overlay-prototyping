@@ -130,7 +130,7 @@ def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_
         while True:
             if analysis.check_results_status() and analysis.check_analysis_status():
                 break
-            time.sleep(.5)
+            time.sleep(3*60)
     analysis.save_state(saved_state)
     [t.join() for t in threads]
     if do_return:

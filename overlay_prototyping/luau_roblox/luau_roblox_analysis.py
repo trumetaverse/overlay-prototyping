@@ -20,7 +20,7 @@ from ..base import BaseException
 
 
 class LuauRobloxAnalysis(Analysis):
-    def __init__(self, sift_results=None, luapage_pointers_file=None, byfron_analysis=False, **kargs):
+    def __init__(self, sift_results=None, luapage_pointers_file=None, byfron_analysis=False, save_state=None, **kargs):
         super(LuauRobloxAnalysis, self).__init__(name="LuauRobloxAnalysis", **kargs)
         self.luapage_pointers_file = luapage_pointers_file
         self.lrss = None
@@ -38,6 +38,7 @@ class LuauRobloxAnalysis(Analysis):
         self.anchor_sections = {}
         self._anchor_mr = {}
         self.objects_by_anchor_section = {}
+        self.save_state_file = save_state
         self.word_sz = kargs.get('word_sz', 4)
         if self.word_sz is None:
             self.word_sz = 4
@@ -1506,6 +1507,15 @@ class LuauRobloxAnalysis(Analysis):
 
     def get_state(self):
         results = []
+        # capture the source informations
+        meta_data = {}
+        meta_data['sift_results'] = self.sift_results
+        meta_data['luapage_pointers_file'] = self.luapage_pointers_file
+        meta_data['byfron_analysis'] = self.byfron_analysis
+        meta_data['save_state_file'] = self.save_state_file
+        meta_data['dmp_file'] = self.dmp_file
+        meta_data['radare_file'] = self.radare_file
+        results.append(meta_data)
         addrs = set()
 
         # add discovered lps and gcos
@@ -1596,7 +1606,10 @@ class LuauRobloxAnalysis(Analysis):
 
         return results
 
-    def save_state(self, outputfile):
+    def save_state(self, outputfile=None):
+        outputfile = outputfile if isinstance(outputfile, str) else self.save_state_file
+        if outputfile is None:
+            raise Exception("Unable to save state.  no output file specified")
         self.log.debug("Obtaining all relevant objects, structures, and references")
         results = self.get_state()
         fmt = "{}\n"
@@ -1616,6 +1629,14 @@ class LuauRobloxAnalysis(Analysis):
             lines = [i.strip() for i in infile.readlines()]
             for line in lines:
                 d = json.loads(line)
+                if 'dmp_file' in line:
+                    self.sift_results = line.get('sift_results', None)
+                    self.luapage_pointers_file = line.get('luapage_pointers_file', None)
+                    self.byfron_analysis = line.get('byfron_analysis', False)
+                    self.save_state_file = line.get('save_state_file', None)
+                    self.dmp_file = line.get('dmp_file', None)
+                    self.radare_file = line.get('radare_file', None)
+                    continue
                 addr = d['addr']
                 ecls = eval(d['type'])
                 is_tval = d['type'].find('LuauRW_TValue') != -1
@@ -1675,3 +1696,54 @@ class LuauRobloxAnalysis(Analysis):
             self.state_association[thread.addr] = {'global_State': LuauRWB_global_State.from_analysis(gs, self, safe_load=False),
                                  'thread': thread}
         return self.state_association
+
+    @classmethod
+    def init_from(cls, base_directory, bin_name, load_pointers=False, scan=False, byfron_analysis=True):
+        reset_global_deps(base_directory)
+        dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
+        pointers_file = POINTERS_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
+        lua_pointers_file = LUAPAGE_POINTER_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
+        radare_memory_info_file = MEMORY_INFO_FMT.format(**{"base_dir": MEMS_DIR, 'bin_name': bin_name})
+        saved_state = SAVED_OBJECTS_FILE.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
+        analysis = LuauRobloxAnalysis(dmp_file=dmp_file,
+                                      radare_file_data=radare_memory_info_file,
+                                      sift_results=pointers_file,
+                                      luapage_pointers_file=lua_pointers_file,
+                                      byfron_analysis=byfron_analysis,
+                                      save_state=saved_state)
+        if scan:
+            lpscan_results = analysis.scan_lua_pages_gco(add_obj=True)
+            tvals = analysis.scan_lua_pages_tvalue(add_obj=True)
+        if load_pointers:
+            analysis.load_sift_results()
+            while True:
+                if analysis.check_results_status() and analysis.check_analysis_status():
+                    break
+                time.sleep(.5)
+        return analysis
+
+    @classmethod
+    def init_from(cls, base_directory, bin_name, load_pointers=False, scan=False, byfron_analysis=True):
+        reset_global_deps(base_directory)
+        dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
+        pointers_file = POINTERS_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
+        lua_pointers_file = LUAPAGE_POINTER_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
+        radare_memory_info_file = MEMORY_INFO_FMT.format(**{"base_dir": MEMS_DIR, 'bin_name': bin_name})
+        saved_state = SAVED_OBJECTS_FILE.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
+        analysis = LuauRobloxAnalysis(dmp_file=dmp_file,
+                                      radare_file_data=radare_memory_info_file,
+                                      sift_results=pointers_file,
+                                      luapage_pointers_file=lua_pointers_file,
+                                      byfron_analysis=byfron_analysis,
+                                      save_state=saved_state)
+        if scan:
+            lpscan_results = analysis.scan_lua_pages_gco(add_obj=True)
+            tvals = analysis.scan_lua_pages_tvalue(add_obj=True)
+        if load_pointers:
+            analysis.load_sift_results()
+            while True:
+                if analysis.check_results_status() and analysis.check_analysis_status():
+                    break
+                time.sleep(.5)
+        return analysis
+

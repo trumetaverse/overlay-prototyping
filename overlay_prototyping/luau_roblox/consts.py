@@ -1,4 +1,4 @@
-
+import os
 UNINT_MAX = 4294967295
 LUA_MINSTACK = 20
 MAXSSIZE = (1 << 30)
@@ -444,3 +444,30 @@ COMPILER_TYPES = [
 ]
 COMPILER_TYPES_MAPPING = {k:v for k, v in enumerate(COMPILER_TYPES)}
 MERGE (COMPILER_TYPES_MAPPING, {v:k for k, v in enumerate(COMPILER_TYPES)})
+
+BASE_DIR = "E:/dumps/2023-04-28/"
+BINS_DIR = os.path.join(BASE_DIR, 'bins')
+MEMS_DIR = os.path.join(BASE_DIR, 'mem')
+SEARCHES_DIR = os.path.join(BASE_DIR, 'searches')
+DUMP_EXT = 'DMP'
+
+DUMP_FMT = "{base_dir}/{bin_name}.{dmp_ext}"
+LUAPAGE_POINTER_FMT = "{base_dir}/{bin_name}/luapage_comments.json"
+POINTERS_FMT = "{base_dir}/{bin_name}/pointer_comments.json"
+MEMORY_INFO_FMT = "{base_dir}/{bin_name}.json"
+
+IDENTIFIED_OBJECTS_PARSE_FMT = "{base_dir}/{bin_name}/memory_ranges_roblox_assets.json"
+IDENTIFIED_OBJECTS_FULL_FMT = "{base_dir}/{bin_name}/full_dump_roblox_assets.json"
+
+SAVED_OBJECTS_FILE = "{base_dir}/{bin_name}/gcos_and_structs.json"
+FULL_EXTRACTED_GAME_ASSETS_BASE = "{base_dir}/{bin_name}/extracted_assets/full/"
+PARSE_EXTRACTED_GAME_ASSETS_BASE = "{base_dir}/{bin_name}/extracted_assets/parse/"
+
+def reset_global_deps(base_dir):
+    global BASE_DIR, BINS_DIR, MEMS_DIR, SEARCHES_DIR
+    BASE_DIR = base_dir
+    BINS_DIR = os.path.join(BASE_DIR, 'bins')
+    MEMS_DIR = os.path.join(BASE_DIR, 'mem')
+    SEARCHES_DIR = os.path.join(BASE_DIR, 'searches')
+
+
