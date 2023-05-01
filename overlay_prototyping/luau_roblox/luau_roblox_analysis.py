@@ -32,7 +32,7 @@ class LuauRobloxAnalysis(Analysis):
         if not hasattr(self, 'is_32bit'):
             self.is_32bit = True
 
-        self.raw_sift_results = sift_results
+        self.sift_results = sift_results
         self.sift_results_loaded = False
         self.anchor_objects = {}
         self.anchor_sections = {}
@@ -66,6 +66,7 @@ class LuauRobloxAnalysis(Analysis):
         self.TValueCls = LuauRW_TValue
         self.GlobalStateCls = LuauRW_global_State
         self.LuaPageCls = LuauRW_lua_Page
+        self.byfron_analysis = byfron_analysis
         if byfron_analysis:
             self.GCO_TT_MAPPING = GCO_TT_BMAPPING
             self.GCO_NAME_MAPPING = GCO_NAME_BMAPPING
@@ -225,7 +226,7 @@ class LuauRobloxAnalysis(Analysis):
         elif hasattr(self, 'load_srt') and self.load_srt and self.load_srt.is_alive():
             self.log.debug(
                 "Still loading. loaded potential gcos from {} and potential structs {} results from {}".format(
-                    len(self.lrss.gco_results), len(self.lrss.struct_results), self.raw_sift_results))
+                    len(self.lrss.gco_results), len(self.lrss.struct_results), self.sift_results))
             return False
         return self.mark_complete()
 
@@ -419,7 +420,7 @@ class LuauRobloxAnalysis(Analysis):
             self.load_srt = None
             self.log.debug(
                 "Sift results loading Completed. loaded potential gcos from {} and potential structs {} results from {}".format(
-                    len(self.lrss.gco_results), len(self.lrss.struct_results), self.raw_sift_results))
+                    len(self.lrss.gco_results), len(self.lrss.struct_results), self.sift_results))
         return self.sift_results_loaded
 
     def thread_completed(self):
@@ -430,19 +431,19 @@ class LuauRobloxAnalysis(Analysis):
         self.analysis_thread.start()
 
     def load_sift_results(self, pointer_file=None, background=True, bulk_load=True) -> bool:
-        if self.raw_sift_results is None and pointer_file is None:
+        if self.sift_results is None and pointer_file is None:
             raise BaseException("No sift results file set")
 
         if self.load_srt is not None:
             return self.check_results_status()
 
-        if self.raw_sift_results is None:
-            self.raw_sift_results = pointer_file
+        if self.sift_results is None:
+            self.sift_results = pointer_file
 
-        self.log.debug("Loading luau-sifter results from {}".format(self.raw_sift_results))
+        self.log.debug("Loading luau-sifter results from {}".format(self.sift_results))
 
         kwargs = {'bulk_load': bulk_load, 'callback': self.thread_completed}
-        self.load_srt = Thread(target=self.lrss.parse_file, kwargs=kwargs, args=(self.raw_sift_results,))
+        self.load_srt = Thread(target=self.lrss.parse_file, kwargs=kwargs, args=(self.sift_results,))
         self.load_srt.start()
         if not background:
             self.load_srt.join()
@@ -1524,7 +1525,7 @@ class LuauRobloxAnalysis(Analysis):
             t = {'type': "LuauRW_lua_Page", "addr": lp_addr}
             addrs.add(lp_addr)
             _luapage = self.lua_pages.lpages[lp_addr]
-            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr} for gco in
+            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'printable_string': gco.addr in self.printable_strings} for gco in
                      _luapage.objects.values() if gco]
             gcos = [i for i in _gcos if i['addr'] not in addrs]
             addrs |= {i['addr'] for i in gcos}
@@ -1535,7 +1536,7 @@ class LuauRobloxAnalysis(Analysis):
             results = results + [t] + gcos
         # add discovered gcos
         for tt in self.lua_gco:
-            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr} for gco in
+            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'printable_string': gco.addr in self.printable_strings} for gco in
                      self.lua_gco[tt].values() if gco]
             gcos = [i for i in _gcos if i['addr'] not in addrs]
             addrs |= {i['addr'] for i in gcos}
@@ -1546,7 +1547,7 @@ class LuauRobloxAnalysis(Analysis):
         for addr in references:
             gco = references[addr]['object']
             refs = references[addr]['references']
-            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'references': sorted(refs)}
+            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'printable_string': gco.addr in self.printable_strings, 'references': sorted(refs)}
             addrs.add(addr)
             results = results + [gco_i]
 
@@ -1554,7 +1555,7 @@ class LuauRobloxAnalysis(Analysis):
         for addr in references:
             gco = references[addr]['object']
             refs = references[addr]['references']
-            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'references': sorted(refs)}
+            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'printable_string': gco.addr in self.printable_strings, 'references': sorted(refs)}
             addrs.add(addr)
             results = results + [gco_i]
 
@@ -1608,6 +1609,8 @@ class LuauRobloxAnalysis(Analysis):
 
     def save_state(self, outputfile=None):
         outputfile = outputfile if isinstance(outputfile, str) else self.save_state_file
+        if self.save_state_file is None:
+            self.save_state_file = outputfile
         if outputfile is None:
             raise Exception("Unable to save state.  no output file specified")
         self.log.debug("Obtaining all relevant objects, structures, and references")
@@ -1646,6 +1649,8 @@ class LuauRobloxAnalysis(Analysis):
                     if lco.is_gco():
                         self.add_gc_object(addr, lco)
                         gcos[lco.addr] = lco
+                        if 'printable_string' in d and d['printable_string']:
+                            self.printable_strings[lco.addr] = lco
                     elif not is_lua_page:
                         self.add_struct_object(addr, lco)
                         self.lua_pages.add_page(lco, walk_pages=False)
@@ -1699,37 +1704,13 @@ class LuauRobloxAnalysis(Analysis):
 
     @classmethod
     def init_from(cls, base_directory, bin_name, load_pointers=False, scan=False, byfron_analysis=True):
+        from overlay_prototyping.luau_roblox import consts
         reset_global_deps(base_directory)
-        dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
-        pointers_file = POINTERS_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
-        lua_pointers_file = LUAPAGE_POINTER_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
-        radare_memory_info_file = MEMORY_INFO_FMT.format(**{"base_dir": MEMS_DIR, 'bin_name': bin_name})
-        saved_state = SAVED_OBJECTS_FILE.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
-        analysis = LuauRobloxAnalysis(dmp_file=dmp_file,
-                                      radare_file_data=radare_memory_info_file,
-                                      sift_results=pointers_file,
-                                      luapage_pointers_file=lua_pointers_file,
-                                      byfron_analysis=byfron_analysis,
-                                      save_state=saved_state)
-        if scan:
-            lpscan_results = analysis.scan_lua_pages_gco(add_obj=True)
-            tvals = analysis.scan_lua_pages_tvalue(add_obj=True)
-        if load_pointers:
-            analysis.load_sift_results()
-            while True:
-                if analysis.check_results_status() and analysis.check_analysis_status():
-                    break
-                time.sleep(.5)
-        return analysis
-
-    @classmethod
-    def init_from(cls, base_directory, bin_name, load_pointers=False, scan=False, byfron_analysis=True):
-        reset_global_deps(base_directory)
-        dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
-        pointers_file = POINTERS_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
-        lua_pointers_file = LUAPAGE_POINTER_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
-        radare_memory_info_file = MEMORY_INFO_FMT.format(**{"base_dir": MEMS_DIR, 'bin_name': bin_name})
-        saved_state = SAVED_OBJECTS_FILE.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
+        dmp_file = DUMP_FMT.format(**{"base_dir": consts.BINS_DIR, 'bin_name': bin_name, "dmp_ext": consts.DUMP_EXT})
+        pointers_file = POINTERS_FMT.format(**{"base_dir": consts.SEARCHES_DIR, 'bin_name': bin_name})
+        lua_pointers_file = LUAPAGE_POINTER_FMT.format(**{"base_dir": consts.SEARCHES_DIR, 'bin_name': bin_name})
+        radare_memory_info_file = MEMORY_INFO_FMT.format(**{"base_dir": consts.MEMS_DIR, 'bin_name': bin_name})
+        saved_state = SAVED_OBJECTS_FILE.format(**{"base_dir": consts.SEARCHES_DIR, 'bin_name': bin_name})
         analysis = LuauRobloxAnalysis(dmp_file=dmp_file,
                                       radare_file_data=radare_memory_info_file,
                                       sift_results=pointers_file,
