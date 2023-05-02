@@ -16,6 +16,8 @@ class Transmute_BaseLES(LittleEndianStructure):
     _type_registry_ = None
     _init_required_ = False
     _has_sanity_check_ = False
+    _fields_alias_ = {}
+    _rfields_alias_ = {}
 
     @classmethod
     def get_field_cls(cls, name):
@@ -135,6 +137,9 @@ class Transmute_BaseLES(LittleEndianStructure):
     @classmethod
     def get_offset(cls, fld_name, tcls=None):
         tcls = cls if tcls is None else tcls
+        if fld_name in tcls._fields_alias_ and not hasattr(tcls, fld_name):
+            fld_name = tcls._fields_alias_[fld_name]
+
         cls_fld = getattr(tcls, fld_name, None)
         return getattr(cls_fld, 'offset', None)
 
@@ -166,19 +171,23 @@ class Transmute_BaseLES(LittleEndianStructure):
             offset = self.get_offset(name, cls)
             ft = self.get_typestr_for_dump(name)
             fmt = self.get_str_fmt(name)
+            fld_name = self.alias_field(name)
             if hasattr(field, '_fields_') and getattr(self, '_is_union_', False):
                 _nobj = getattr(self, name)
                 _struct_dict, _flat = _nobj.get_dump( word_sz=word_sz, addr=addr+offset)
                 y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset,
                      "fmt": fmt, "is_array": is_array}
                 r[addr + offset] = y
+                y = y.copy()
+                # flat version is used to print info about structure
+                y['name'] = fld_name
                 for i in _flat:
-                    i['name'] = name + '.' + i['name']
+                    i['name'] = fld_name + '.' + i['name']
                 flat.append(
-                    {"name": name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft, 'offset': offset,
+                    {"name": fld_name, "value": "STRUCT_START", "addr": addr + offset, 'type': ft, 'offset': offset,
                      "fmt": fmt, "is_array": is_array})
                 flat = flat + _flat
-                flat.append({"name": name, "value": "STRUCT_END", "addr": addr + offset, 'type': ft, 'offset': offset,
+                flat.append({"name": fld_name, "value": "STRUCT_END", "addr": addr + offset, 'type': ft, 'offset': offset,
                              "fmt": fmt, "is_array": is_array})
             elif hasattr(field, '_fields_'):
                 _nobj = getattr(self, name)
@@ -186,19 +195,25 @@ class Transmute_BaseLES(LittleEndianStructure):
                 y = {"name": name, "value": _struct_dict, "addr": addr + offset, 'type': ft, 'offset': offset,
                      "fmt": fmt, "is_array": is_array}
                 r[addr + offset] = y
+                # flat version is used to print info about structure
+                y = y.copy()
+                y['name'] = fld_name
                 for i in _flat:
-                    i['name'] = name + '.' + i['name']
+                    i['name'] = fld_name + '.' + i['name']
                 flat.append(
-                    {"name": name, "value": "UNION_START", "addr": addr + offset, 'type': ft, 'offset': offset,
+                    {"name": fld_name, "value": "UNION_START", "addr": addr + offset, 'type': ft, 'offset': offset,
                      "fmt": fmt, "is_array": is_array})
                 flat = flat + _flat
-                flat.append({"name": name, "value": "UNION_END", "addr": addr + offset, 'type': ft, 'offset': offset,
+                flat.append({"name": fld_name, "value": "UNION_END", "addr": addr + offset, 'type': ft, 'offset': offset,
                              "fmt": fmt, "is_array": is_array})
             else:
                 # ft = field.__name__ if not isinstance(field, str) else field
                 x = {"name": name, "value": getattr(self, name), "addr": addr + offset, 'type': ft, 'offset': offset,
                      "fmt": fmt, "is_array": is_array}
                 r[addr + offset] = x
+                x = x.copy()
+                # flat version is used to print info about structure
+                x['name'] = fld_name
                 flat.append(x)
         return r, flat
 
@@ -336,5 +351,35 @@ class Transmute_BaseLES(LittleEndianStructure):
         return None
 
     def addr_of(self, fld_name):
+        if fld_name in self._fields_alias_ and not hasattr(self, fld_name):
+            fld_name = self._fields_alias_[fld_name]
         offset = self.get_offset(fld_name)
         return self.addr + offset
+
+    @classmethod
+    def update_alias_by_ordered_list(cls, alias_fields, ordered_fields ):
+        if not isinstance(alias_fields, list) or len(alias_fields) == 0:
+            return None
+        x = {k: v for k, v in zip(alias_fields, ordered_fields[:len(alias_fields)])}
+        y = {v: k for k,v in x.items()}
+        if len(x) > 0:
+            cls._fields_alias_.update(x)
+            cls._rfields_alias_.update(y)
+        return cls._fields_alias_
+
+    @classmethod
+    def update_alias_by_dict(cls, **kargs):
+        for k, v in kargs.items():
+            if isinstance(k, str) and isinstance(v, str):
+                cls._fields_alias_[k] = v
+                cls._rfields_alias_[v] = k
+
+    def unalias_field(self, fld_name):
+        alias = self._fields_alias_.get(fld_name, None)
+        if alias:
+            return getattr(self, alias, None)
+        return None
+
+    def alias_field(self, fld_name):
+        alias = self._rfields_alias_.get(fld_name, fld_name)
+        return alias

@@ -6,21 +6,22 @@ import time
 from threading import Thread
 
 from .consts import *
-from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult, LuauByfronSifterResult
+from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
 from .luau_roblox_page import LuaPages
 # from .luau_roblox_base import LuauRobloxBase
 from .overlay_base import LuauRW_BaseStruct, LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Table, \
     LuauRW_UpVal, LuauRW_Closure, LuauRW_GCHeader, LuauRW_TValue, LuauRW_global_State, \
-    LuauRW_lua_Page, LuauRW_ProtoECB, GCO_TT_MAPPING, GCO_NAME_MAPPING
+    LuauRW_lua_Page, LuauRW_ProtoECB, GCO_TT_MAPPING, GCO_NAME_MAPPING, LuauRW_BaseStruct
 from .overlay_byfron import LuauRWB_TString, LuauRWB_lua_State, LuauRWB_Udata, LuauRWB_Table, \
     LuauRWB_UpVal, LuauRWB_Closure, LuauRWB_TValue, LuauRWB_global_State, \
-    LuauRWB_ProtoECB, LuauRWB_GCHeader, LuauRWB_lua_Page, GCO_TT_BMAPPING, GCO_NAME_BMAPPING
+    LuauRWB_ProtoECB, LuauRWB_GCHeader, LuauRWB_lua_Page, GCO_TT_BMAPPING, GCO_NAME_BMAPPING, LuauRWB_BaseStruct
 from ..analysis import Analysis, MemRange
 from ..base import BaseException
 
 
 class LuauRobloxAnalysis(Analysis):
-    def __init__(self, sift_results=None, luapage_pointers_file=None, byfron_analysis=False, save_state=None, **kargs):
+    def __init__(self, sift_results=None, luapage_pointers_file=None, byfron_analysis=False, save_state=None,
+                 gch_field_order=None, tstring_len_calc="basic", **kargs):
         super(LuauRobloxAnalysis, self).__init__(name="LuauRobloxAnalysis", **kargs)
         self.luapage_pointers_file = luapage_pointers_file
         self.lrss = None
@@ -59,7 +60,12 @@ class LuauRobloxAnalysis(Analysis):
         self.lua_table_values = {}
         self.lua_pages = LuaPages()
         self.valid_lua_gco_pages = []
-        self.lrss = LuauSifterResults(byfron_sift_results=byfron_analysis)
+
+        gch_field_order = gch_field_order if gch_field_order else GCH_FIELD_DEFAULT_ORDER \
+            if not byfron_analysis else BGCH_FIELD_DEFAULT_ORDER
+
+        self.gch_field_order = gch_field_order
+        self.update_unscramble_mapping(gch_field_order)
         self.GCO_TT_MAPPING = GCO_TT_MAPPING
         self.GCO_NAME_MAPPING = GCO_NAME_MAPPING
         self.GCHeaderCls = LuauRW_GCHeader
@@ -67,16 +73,28 @@ class LuauRobloxAnalysis(Analysis):
         self.GlobalStateCls = LuauRW_global_State
         self.LuaPageCls = LuauRW_lua_Page
         self.byfron_analysis = byfron_analysis
-        if byfron_analysis:
+        if self.byfron_analysis:
             self.GCO_TT_MAPPING = GCO_TT_BMAPPING
             self.GCO_NAME_MAPPING = GCO_NAME_BMAPPING
             self.GCHeaderCls = LuauRWB_GCHeader
             self.TValueCls = LuauRWB_TValue
             self.GlobalStateCls = LuauRWB_global_State
             self.LuaPageCls = LuauRWB_lua_Page
+            LuauRWB_TString.set_calc_strlen(approach=tstring_len_calc)
+
+        self.lrss = LuauSifterResults(byfron_sift_results=byfron_analysis)
 
         self.state_association = {}
         self.free_blocks = {}
+
+    def update_unscramble_mapping(self, gch_field_order=None):
+        self.gch_field_order = gch_field_order if gch_field_order else self.gch_field_order
+        if self.gch_field_order:
+            LuauRW_GCHeader.update_alias_by_ordered_list(alias_fields=self.gch_field_order)
+            LuauRWB_GCHeader.update_alias_by_ordered_list(alias_fields=self.gch_field_order)
+            LuauRW_BaseStruct.update_alias_by_ordered_list(alias_fields=self.gch_field_order)
+            LuauRWB_BaseStruct.update_alias_by_ordered_list(alias_fields=self.gch_field_order)
+            LuauSifterResult.update_alias_by_ordered_list(alias_fields=self.gch_field_order)
 
     def load_lua_pages(self, luapage_pointers_file=None):
         luapage_pointers_file = self.luapage_pointers_file if luapage_pointers_file is None else luapage_pointers_file
@@ -240,13 +258,14 @@ class LuauRobloxAnalysis(Analysis):
     def is_sift_results_loaded(self) -> bool:
         return self.sift_results_loaded
 
-    def scan_lua_pages_gco(self, add_obj=False, scan_entire_block=False) -> [
+    def scan_lua_pages_gco(self, add_obj=False, scan_entire_block=False, do_sanity_check=True) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
         LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         lpages = self.lua_pages.get_pages()
         objs = []
         checked = []
         self.valid_lua_gco_pages = []
+        lpages = sorted(lpages, key=lambda x: x.addr)
         for lpage in lpages:
             # evaluate whether this lua_Page is relevant and should be searched
             if any([i[0] < lpage.addr < i[1] for i in checked]):
@@ -260,7 +279,7 @@ class LuauRobloxAnalysis(Analysis):
             lpage_start = lpage.addr
             lpage_end = lpage.addr + 24 + lpage.pageSize
             checked.append([lpage_start, lpage_end])
-            r = self.scan_lua_page_gco(lpage=lpage, add_obj=add_obj, scan_entire_block=scan_entire_block)
+            r = self.scan_lua_page_gco(lpage=lpage, add_obj=add_obj, scan_entire_block=scan_entire_block, do_sanity_check=do_sanity_check)
             if len(r) > 0:
                 self.log.debug("Found {} new objects in lua_Page @ 0x{:08x} ".format(len(r), lpage.addr))
                 objs = objs + r
@@ -310,7 +329,8 @@ class LuauRobloxAnalysis(Analysis):
             gco_addr += incr
         return objs
 
-    def scan_lua_page_gco(self, addr=None, lpage=None, add_obj=False, printable_strings=True, incr=4, scan_entire_block=False, do_sanity_check=True) -> [
+    def scan_lua_page_gco(self, addr=None, lpage=None, add_obj=False, printable_strings=True, incr=4,
+                          scan_entire_block=False, do_sanity_check=True) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
         LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         objs = []
@@ -358,6 +378,7 @@ class LuauRobloxAnalysis(Analysis):
             _objs = self.scan_block_for_gco(block_addr + offset, block_size + offset, add_obj=add_obj,
                                             printable_strings=printable_strings, incr=incr, tables=tables,
                                             scan_entire_block=scan_entire_block, do_sanity_check=do_sanity_check)
+            objs = objs + _objs
         return objs
 
     def sift_results_load_complete(self) -> dict:
@@ -736,7 +757,7 @@ class LuauRobloxAnalysis(Analysis):
             # relaxing the check on the global table.  may not be known
 
             # all_checks = [global_state, call_info, stack, stack_last, gt_valid]
-            all_checks = [ global_state, gt_valid]
+            all_checks = [global_state, gt_valid]
             if all(all_checks):
                 threads.append(obj)
         if add_obj:
@@ -755,9 +776,19 @@ class LuauRobloxAnalysis(Analysis):
         tables = {}
         dt = {i.addr: i for i in tables_list}
         for t in dt.values():
-            if self.valid_vaddr(t.metatable) and t.metatable in dt:
+            if t.metatable in dt:
                 tables[t.addr] = t
                 tables[t.metatable] = t
+            elif not self.byfron_analysis and self.valid_vaddr(t.metatable):
+                gco = self.read_gco(t.metatable, tt=TTABLE)
+                if gco and gco.tt == TTABLE:
+                    tables[t.addr] = t
+                    tables[t.metatable] = t
+            elif not self.byfron_analysis and self.valid_vaddr(t.metatable):
+                gco = self.read_gco(t.metatable, tt=TTABLE)
+                if gco and gco.tt == TTABLE:
+                    tables[t.addr] = t
+                    tables[t.metatable] = t
         tables = list(tables.values())
         if add_obj:
             for o in tables:
@@ -1003,8 +1034,10 @@ class LuauRobloxAnalysis(Analysis):
             return True
         elif not printable_string and obj.addr in self.strings:
             return True
-
-        if not self.valid_vaddr(obj.end) or obj.end < obj.addr:
+        if not self.byfron_analysis and not self.valid_vaddr(obj.end) or obj.end < obj.addr:
+            return False
+        # FIXME Probably not the best sanity check
+        elif (obj.end + obj.addr_of('end')) > 0xffffffff:
             return False
         value = None if not (isinstance(obj, self.GCO_TT_MAPPING.get(TSTRING))) else obj.get_value()
         if value is None or len(value) > MAXSSIZE:
@@ -1167,7 +1200,7 @@ class LuauRobloxAnalysis(Analysis):
                 "lua_Page failed sanity check 0x{:08x}: lpage.pageSize > max_size or lpage.pageSize < 32".format(
                     lpage.addr))
             return False
-        elif lpage.blockSize <= 7:# or lpage.blockSize > max_size:
+        elif lpage.blockSize <= 7:  # or lpage.blockSize > max_size:
             self.log.debug(
                 "lua_Page failed sanity check 0x{:08x}: lpage.blockSize <= 7 or lpage.blockSize > max_size".format(
                     lpage.addr))
@@ -1287,7 +1320,6 @@ class LuauRobloxAnalysis(Analysis):
                 if nlp.prev > 0 and nlp.prev not in already_visited:
                     not_visited_pages.add(nlp.prev)
 
-
             already_visited = already_visited | visited
             not_visited_pages = list(not_visited_pages)
             self.log.debug("found {} unvisited lua pages".format(len(not_visited_pages)))
@@ -1354,7 +1386,7 @@ class LuauRobloxAnalysis(Analysis):
         offset = lua_page.freeNext + lua_page.get_offset('data') + lua_page.blockSize
         return lua_page.addr + offset
 
-    def scan_lua_pages_tvalue(self, add_obj=False, num_threads=None, pot_gco=None, pot_tval=None, pot_tt=None):
+    def scan_lua_pages_tvalue(self, add_obj=False, num_threads=None, pot_gco=None, pot_tval=None, pot_tt=None, do_sanity_check=True):
         lua_pages = self.lua_pages.get_pages()
         pot_gco = {} if pot_gco is None else pot_gco
         pot_tval = {} if pot_tval is None else pot_tval
@@ -1370,7 +1402,7 @@ class LuauRobloxAnalysis(Analysis):
                 self.log.debug("Processing {} of {} lua_Pages ".format(cnt, num_lps))
                 t = Thread(target=self.scan_lua_page_tvalue,
                            args=(lp,),
-                           kwargs={'pot_gco': pot_gco, 'pot_tval': pot_tval, 'pot_tt': pot_tt, 'add_obj': add_obj})
+                           kwargs={'pot_gco': pot_gco, 'pot_tval': pot_tval, 'pot_tt': pot_tt, 'add_obj': add_obj, 'do_sanity_check': do_sanity_check})
                 t.start()
                 active_threads.append(t)
                 active_threads = [i for i in active_threads if i.is_alive()]
@@ -1404,9 +1436,10 @@ class LuauRobloxAnalysis(Analysis):
             for lp in lua_pages:
                 self.log.debug(
                     "Scanning lua_Page {:08x} of size: {} for tvalues".format(lp.addr, lp.pageSize))
-                x = self.scan_lua_page_tvalue(lp, add_obj=add_obj)
+                x = self.scan_lua_page_tvalue(lp, add_obj=add_obj, do_sanity_check=do_sanity_check)
                 self.log.debug(
-                    "lua_Page {:08x} found {} GCOs and found {} tvalues".format(lp.addr, len(x['pot_gco']), len(x['pot_tval'])))
+                    "lua_Page {:08x} found {} GCOs and found {} tvalues".format(lp.addr, len(x['pot_gco']),
+                                                                                len(x['pot_tval'])))
                 pot_gco.update(x['pot_gco'])
                 pot_tval.update(x['pot_tval'])
                 for tt in x['pot_tt'].keys():
@@ -1416,7 +1449,8 @@ class LuauRobloxAnalysis(Analysis):
         return results
 
     def scan_block_for_tvalue(self, block_addr, block_size, add_obj=False, printable_strings=True, incr=4, tables=None,
-                              pot_gco=None, pot_tt=None, pot_tval=None, parse_bare_pointers=False, do_sanity_check=True) -> [
+                              pot_gco=None, pot_tt=None, pot_tval=None, parse_bare_pointers=False,
+                              do_sanity_check=True) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata]:
 
         # tables = tables if isinstance(tables, list) else []
@@ -1456,14 +1490,16 @@ class LuauRobloxAnalysis(Analysis):
                         self.add_gc_object(tval_addr, gco, ref_addr=None)
             tval_addr += incr
         self.log.debug(
-            "lua_Page {:08x} of size: {} @block {:08x} found {} tvalues and {} gcos".format(lp.addr if lp else block_addr,
-                                                                                            lp.pageSize if lp else block_size,
-                                                                                            block_addr,
-                                                                                            len(pot_tval),
-                                                                                            len(pot_gco)))
+            "lua_Page {:08x} of size: {} @block {:08x} found {} tvalues and {} gcos".format(
+                lp.addr if lp else block_addr,
+                lp.pageSize if lp else block_size,
+                block_addr,
+                len(pot_tval),
+                len(pot_gco)))
         return results
 
-    def scan_lua_page_tvalue(self, lp: LuauRW_lua_Page | LuauRWB_lua_Page, add_obj=False, pot_gco=None, pot_tval=None, pot_tt=None):
+    def scan_lua_page_tvalue(self, lp: LuauRW_lua_Page | LuauRWB_lua_Page, add_obj=False, pot_gco=None, pot_tval=None,
+                             pot_tt=None, do_sanity_check=True):
         pot_gco = {} if pot_gco is None else pot_gco
         pot_tval = {} if pot_tval is None else pot_tval
         pot_tt = {k: [] for k in LUA_TAG_TYPES} if pot_tt is None else pot_tt
@@ -1503,7 +1539,7 @@ class LuauRobloxAnalysis(Analysis):
                 offset = -8
             _ = self.scan_block_for_tvalue(block_addr + offset, block_size + offset, add_obj=add_obj, pot_gco=pot_gco,
                                            pot_tt=pot_tt,
-                                           pot_tval=pot_tval)
+                                           pot_tval=pot_tval, do_sanity_check=do_sanity_check)
         return results
 
     def get_state(self):
@@ -1516,6 +1552,7 @@ class LuauRobloxAnalysis(Analysis):
         meta_data['save_state_file'] = self.save_state_file
         meta_data['dmp_file'] = self.dmp_file
         meta_data['radare_file'] = self.radare_file
+        meta_data['gch_field_order'] = self.gch_field_order
         results.append(meta_data)
         addrs = set()
 
@@ -1525,7 +1562,8 @@ class LuauRobloxAnalysis(Analysis):
             t = {'type': "LuauRW_lua_Page", "addr": lp_addr}
             addrs.add(lp_addr)
             _luapage = self.lua_pages.lpages[lp_addr]
-            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'printable_string': gco.addr in self.printable_strings} for gco in
+            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr,
+                      'printable_string': gco.addr in self.printable_strings} for gco in
                      _luapage.objects.values() if gco]
             gcos = [i for i in _gcos if i['addr'] not in addrs]
             addrs |= {i['addr'] for i in gcos}
@@ -1536,7 +1574,8 @@ class LuauRobloxAnalysis(Analysis):
             results = results + [t] + gcos
         # add discovered gcos
         for tt in self.lua_gco:
-            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'printable_string': gco.addr in self.printable_strings} for gco in
+            _gcos = [{'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr,
+                      'printable_string': gco.addr in self.printable_strings} for gco in
                      self.lua_gco[tt].values() if gco]
             gcos = [i for i in _gcos if i['addr'] not in addrs]
             addrs |= {i['addr'] for i in gcos}
@@ -1547,7 +1586,8 @@ class LuauRobloxAnalysis(Analysis):
         for addr in references:
             gco = references[addr]['object']
             refs = references[addr]['references']
-            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'printable_string': gco.addr in self.printable_strings, 'references': sorted(refs)}
+            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr,
+                     'printable_string': gco.addr in self.printable_strings, 'references': sorted(refs)}
             addrs.add(addr)
             results = results + [gco_i]
 
@@ -1555,7 +1595,8 @@ class LuauRobloxAnalysis(Analysis):
         for addr in references:
             gco = references[addr]['object']
             refs = references[addr]['references']
-            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr, 'printable_string': gco.addr in self.printable_strings, 'references': sorted(refs)}
+            gco_i = {'type': "{}".format(gco.__class__.__name__), 'addr': gco.addr,
+                     'printable_string': gco.addr in self.printable_strings, 'references': sorted(refs)}
             addrs.add(addr)
             results = results + [gco_i]
 
@@ -1639,6 +1680,8 @@ class LuauRobloxAnalysis(Analysis):
                     self.save_state_file = line.get('save_state_file', None)
                     self.dmp_file = line.get('dmp_file', None)
                     self.radare_file = line.get('radare_file', None)
+                    self.gch_field_order = line.get('gch_field_order', None)
+                    self.update_unscramble_mapping()
                     continue
                 addr = d['addr']
                 ecls = eval(d['type'])
@@ -1682,7 +1725,7 @@ class LuauRobloxAnalysis(Analysis):
             self.log.debug("Completed loading state from {}".format(inputfile))
         return True
 
-    def get_objects_in_anchor_section(self, obj_tt=None) -> [LuauSifterResult | LuauByfronSifterResult]:
+    def get_objects_in_anchor_section(self, obj_tt=None) -> [LuauSifterResult]:
         if len(self.anchor_sections) == 0:
             self.find_anchor_pages()
 
@@ -1698,12 +1741,13 @@ class LuauRobloxAnalysis(Analysis):
             if gs == 0 or not self.valid_vaddr(gs):
                 self.state_association[gs] = {'global_State': '', 'thread': thread}
                 continue
-            self.state_association[thread.addr] = {'global_State': LuauRWB_global_State.from_analysis(gs, self, safe_load=False),
-                                 'thread': thread}
+            self.state_association[thread.addr] = {
+                'global_State': LuauRWB_global_State.from_analysis(gs, self, safe_load=False),
+                'thread': thread}
         return self.state_association
 
     @classmethod
-    def init_from(cls, base_directory, bin_name, load_pointers=False, scan=False, byfron_analysis=True):
+    def init_from(cls, base_directory, bin_name, load_pointers=False, scan=False, byfron_analysis=True, gch_field_order=None, tstring_len_calc=None):
         from overlay_prototyping.luau_roblox import consts
         reset_global_deps(base_directory)
         dmp_file = DUMP_FMT.format(**{"base_dir": consts.BINS_DIR, 'bin_name': bin_name, "dmp_ext": consts.DUMP_EXT})
@@ -1716,7 +1760,9 @@ class LuauRobloxAnalysis(Analysis):
                                       sift_results=pointers_file,
                                       luapage_pointers_file=lua_pointers_file,
                                       byfron_analysis=byfron_analysis,
-                                      save_state=saved_state)
+                                      save_state=saved_state,
+                                      gch_field_order=gch_field_order,
+                                      tstring_len_calc=tstring_len_calc)
         if scan:
             lpscan_results = analysis.scan_lua_pages_gco(add_obj=True)
             tvals = analysis.scan_lua_pages_tvalue(add_obj=True)
@@ -1727,4 +1773,3 @@ class LuauRobloxAnalysis(Analysis):
                     break
                 time.sleep(.5)
         return analysis
-

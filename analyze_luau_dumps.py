@@ -2,7 +2,6 @@ import os
 import json
 import argparse
 import multiprocessing as mp
-import asyncio
 import sys
 import logging
 import threading
@@ -98,6 +97,7 @@ def parse_extract_downloaded_assets(bin_name):
     output_dir = PARSE_EXTRACTED_GAME_ASSETS_BASE.format(**{"base_dir": SEARCHES_DIR, "bin_name": bin_name})
     extract_assets(asset_info_file, dmp_file, output_dir)
 
+
 def wrapper(bin_name):
     t1 = threading.Thread(target=parse_extract_downloaded_assets, args=(bin_name,))
     t1.start()
@@ -106,7 +106,8 @@ def wrapper(bin_name):
     return [t1, t2]
 
 
-def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_pointers=False, scan=True):
+def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_pointers=False, scan=True, ts_len=None,
+                          gch_field_order=None, do_sanity_check=False):
     print("here", bin_name, byfron_analysis, do_return, load_pointers)
     dmp_file = DUMP_FMT.format(**{"base_dir": BINS_DIR, 'bin_name': bin_name, "dmp_ext": DUMP_EXT})
     pointers_file = POINTERS_FMT.format(**{"base_dir": SEARCHES_DIR, 'bin_name': bin_name})
@@ -120,17 +121,19 @@ def extract_relevant_data(bin_name, byfron_analysis=True, do_return=False, load_
                                   radare_file_data=radare_memory_info_file,
                                   sift_results=pointers_file,
                                   luapage_pointers_file=lua_pointers_file,
-                                  byfron_analysis=byfron_analysis)
+                                  byfron_analysis=byfron_analysis,
+                                  tstring_len_calc=ts_len,
+                                  gch_field_order=gch_field_order)
     analysis.load_lua_pages()
     if scan:
-        lpscan_results = analysis.scan_lua_pages_gco(add_obj=True)
-        tvals = analysis.scan_lua_pages_tvalue(add_obj=True)
+        lpscan_results = analysis.scan_lua_pages_gco(add_obj=True, do_sanity_check=do_sanity_check)
+        tvals = analysis.scan_lua_pages_tvalue(add_obj=True, do_sanity_check=do_sanity_check)
     if load_pointers:
         analysis.load_sift_results()
         while True:
             if analysis.check_results_status() and analysis.check_analysis_status():
                 break
-            time.sleep(3*60)
+            time.sleep(3 * 60)
     analysis.save_state(saved_state)
     [t.join() for t in threads]
     if do_return:
@@ -149,7 +152,7 @@ def log_completion(bin_name):
     LOGGER.info("Completed {} of {}, parallel extraction for {}".format(CNT, TOTAL, bin_name))
 
 
-def main(bin_name=None, num_jobs=None, load_pointers=False, scan=True):
+def main(bin_name=None, num_jobs=None, load_pointers=False, scan=True, ts_len=None, gch_field_order=None, do_sanity_check=True):
     global TOTAL
     bin_names = None
     if bin_name is None:
@@ -167,7 +170,9 @@ def main(bin_name=None, num_jobs=None, load_pointers=False, scan=True):
         TOTAL = len(bin_names)
         with mp.Pool(num_jobs) as pool:
             for bin in bin_names:
-                pool.apply_async(extract_relevant_data, args=(bin,), kwds={'load_pointers': load_pointers, "scan": scan},
+                pool.apply_async(extract_relevant_data, args=(bin,),
+                                 kwds={'load_pointers': load_pointers, "scan": scan, 'ts_len': ts_len,
+                                       'gch_field_order': gch_field_order, "do_sanity_check":do_sanity_check},
                                  callback=log_completion)
             pool.close()
             pool.join()
@@ -175,7 +180,8 @@ def main(bin_name=None, num_jobs=None, load_pointers=False, scan=True):
 
     elif bin_name is not None:
         LOGGER.info("performing single extraction for {}".format(bin_name))
-        analysis = extract_relevant_data(bin_name, do_return=True, load_pointers=load_pointers, scan=scan)
+        analysis = extract_relevant_data(bin_name, do_return=True, load_pointers=load_pointers, scan=scan,
+                                         ts_len=ts_len, gch_field_order=gch_field_order, do_sanity_check=do_sanity_check)
         LOGGER.info("Completed single extraction for {}".format(bin_name))
     elif bin_names is not None:
         cnt = len(bin_names)
@@ -185,7 +191,8 @@ def main(bin_name=None, num_jobs=None, load_pointers=False, scan=True):
             do_return = len(bin_names) == 0  # last bin_name in list
             LOGGER.info(
                 "Completed {} of {}, performing serial extraction extraction for {}".format(completed, cnt, bin_name))
-            analysis = extract_relevant_data(bin_name, do_return=do_return, load_pointers=load_pointers, scan=scan)
+            analysis = extract_relevant_data(bin_name, do_return=do_return, load_pointers=load_pointers, scan=scan,
+                                             ts_len=ts_len, gch_field_order=gch_field_order, do_sanity_check=do_sanity_check)
             LOGGER.info("Completed single extraction for {}".format(bin_name))
     return analysis
 
@@ -200,28 +207,61 @@ parser.add_argument('-m', '--mp', help='number of concurrent processes', type=in
 parser.add_argument('-e', '--dmp_ext', help='extension of the dump file', type=str, default=DUMP_EXT)
 parser.add_argument('-p', '--load_pointers', help='extension of the dump file', action="store_true", default=False)
 parser.add_argument('-s', '--scan', help='scan for tvalues and gcos', action="store_true", default=False)
+parser.add_argument('--ts_len',
+                    help='set string method of calculating length because it changes per release [add_end_addr_value | basic]',
+                    default='basic')
+parser.add_argument('--gch_order',
+                    help='order of GCO Header fields as a csv because it changes per release for gch_padding, gch_marked, gch_tt, gch_memcat',
+                    default="gch_padding,gch_marked,gch_tt,gch_memcat")
+
+parser.add_argument('--do_sanity_check',
+                    help='perform GCO sanity checks',
+                    default=False, action="store_true")
 
 if __name__ == "__main__":
     init_logger()
     args = parser.parse_args()
-
+    kv = vars(args)
     DUMP_EXT = args.dmp_ext
     if args.dir:
         reset_global_deps(args.dir)
     else:
         LOGGER.error("Failed to provide a working directory")
 
+    allowed_gch = ['gch_padding', 'gch_marked', 'gch_tt', 'gch_memcat']
+    gch_field_order = [i.strip() for i in kv.get('gch_order', '').split(',')] if 'gch_order' in kv else None
+    if isinstance(gch_field_order, list) and set(gch_field_order) != set(allowed_gch):
+        LOGGER.error("Must use all the following values in a csv for gch_order: {} ".format(','.join(allowed_gch)))
+        parser.print_help()
+        sys.exit(1)
+    ts_len = kv.get('ts_len', None)
+    if isinstance(ts_len, str) and not ts_len in ['basic', 'add_end_addr_value']:
+        LOGGER.error(
+            "Must one of the following values for ts_len: {} ".format(','.join(['basic', 'add_end_addr_value'])))
+        parser.print_help()
+        sys.exit(1)
     bin_name = args.bin
     num_jobs = args.mp
     load_pointers = args.load_pointers
     scan = args.scan
-    LOGGER.info("[+++] Starting analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}, scan: {}".format(args.dir, bin_name,
-                                                                                                     num_jobs,
-                                                                                                     load_pointers,
-                                                                                                     scan))
-    main(bin_name=bin_name, num_jobs=num_jobs, load_pointers=load_pointers, scan=scan)
+    do_sanity_check = kv.get("do_sanity_check", False)
     LOGGER.info(
-        "[===] Completed analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{} scan:{}".format(args.dir, bin_name,
-                                                                                              num_jobs,
-                                                                                              load_pointers,
-                                                                                              scan))
+        "[+++] Starting analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}, scan: {}, ts_len: {}, gch_order: {} do_sanity_check: {}".format(
+            args.dir, bin_name,
+            num_jobs,
+            load_pointers,
+            scan,
+            ts_len,
+            ",".join(gch_field_order) if gch_field_order else None,
+            do_sanity_check))
+    main(bin_name=bin_name, num_jobs=num_jobs, load_pointers=load_pointers, scan=scan, gch_field_order=gch_field_order,
+         ts_len=ts_len, do_sanity_check=do_sanity_check)
+    LOGGER.info(
+        "[===] Completed analysis of {} for bin_name:{}  num_jobs:{} load_pointers:{}, scan: {}, ts_len: {}, gch_order: {} do_sanity_check: {}".format(
+            args.dir, bin_name,
+            num_jobs,
+            load_pointers,
+            scan,
+            ts_len,
+            ",".join(gch_field_order) if gch_field_order else None,
+            do_sanity_check))

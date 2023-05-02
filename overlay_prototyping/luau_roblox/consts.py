@@ -3,6 +3,30 @@ UNINT_MAX = 4294967295
 LUA_MINSTACK = 20
 MAXSSIZE = (1 << 30)
 
+
+
+UNSCRAMBLE_GCH_FIELD_0 = 'gch_field_0'
+UNSCRAMBLE_GCH_FIELD_1 = 'gch_field_1'
+UNSCRAMBLE_GCH_FIELD_2 = 'gch_field_2'
+UNSCRAMBLE_GCH_FIELD_3 = "gch_field_3"
+
+GCH_FIELD_DEFAULT_ORDER = ['tt', 'marked', 'memcat', 'gch_padding']
+BGCH_FIELD_DEFAULT_ORDER = ['marked', 'tt', 'memcat', 'gch_padding']
+GCH_ORDERED_FIELDS = [UNSCRAMBLE_GCH_FIELD_0, UNSCRAMBLE_GCH_FIELD_1, UNSCRAMBLE_GCH_FIELD_2, UNSCRAMBLE_GCH_FIELD_3]
+
+
+
+UNSCRAMBLE_FIELD_NAME_TVALUE_TT = "tvalue_field_2"
+UNSCRAMBLE_FIELD_NAME_TKEY_TT = "tkey_field_2"
+
+FIELD_NAME_GCH_MARKED = '_field_name_gch_marked'
+FIELD_NAME_GCH_TT = '_field_name_gch_tt'
+FIELD_NAME_GCH_MEMCAT = '_field_name_gch_memcat'
+FIELD_NAME_GCH_PADDING = "_field_name_gch_gchpadding"
+FIELD_NAME_TVALUE_TT = "_field_name_tvalue_tt"
+FIELD_NAME_TKEY_TT = "_field_name_tkey_tt"
+
+
 DEFAULT_MAX_SIZE = MAXSSIZE/2 #536870912 # 512 MB
 LUAR_ROBLOX_EVENT_NAMES = [
     "__index",

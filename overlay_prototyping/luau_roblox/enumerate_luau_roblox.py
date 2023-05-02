@@ -8,7 +8,6 @@ LUAR_FILTERS = {
 }
 
 
-
 class LuauSifterResult(object):
     KEY_VALUES = ["paddr",
                   "vaddr",
@@ -17,6 +16,12 @@ class LuauSifterResult(object):
                   "sink_value", "sink_paddr_base", "sink_vaddr_base", "vaddr_base", "paddr_base"
                   ]
 
+    _fields_alias_ = {
+        "gch_tt": "gch_field_0",
+        "gch_marked": "gch_field_1",
+        "gch_memcat": "gch_field_2",
+        "gch_padding": "gch_field_3"
+    }
     def __init__(self, **kargs):
         self.paddr = 0
         self.vaddr = 0
@@ -29,10 +34,7 @@ class LuauSifterResult(object):
         self.sink_paddr_base = 0
         self.sink_value = 0
         self.gcheader = None
-        self.marked = 0
-        self.tt = 0
-        self.memcat = 0
-        self.padding = -1
+
         for k, v in kargs.items():
             if k in self.KEY_VALUES and v != "null":
                 setattr(self, k, int(v, 16))
@@ -42,10 +44,43 @@ class LuauSifterResult(object):
                 setattr(self, k, v)
 
         if isinstance(self.sink_value, int):
-            self.tt = (self.sink_value & 0x000000ff)
-            self.marked = (self.sink_value & 0x0000ff00) >> 8
-            self.memcat = (self.sink_value & 0x00ff0000) >> 16
-            self.padding = (self.sink_value & 0xff000000) >> 24
+            self.gch_field_0 = (self.sink_value & 0x000000ff)
+            self.gch_field_1 = (self.sink_value & 0x0000ff00) >> 8
+            self.gch_field_2 = (self.sink_value & 0x00ff0000) >> 16
+            self.gch_field_03 = (self.sink_value & 0xff000000) >> 24
+
+    @classmethod
+    def update_alias_by_ordered_list(cls, alias_fields=None):
+        af = alias_fields if alias_fields else GCH_FIELD_DEFAULT_ORDER
+        x = {k:v for k, v in zip(af, GCH_ORDERED_FIELDS[:len(af)])}
+        if len(x) > 0:
+            cls._fields_alias_.update(x)
+        return cls._fields_alias_
+
+    @classmethod
+    def update_alias_by_dict(cls, **kargs):
+        for k, v in kargs.items():
+            if isinstance(k, str) and isinstance(v, str):
+                cls._fields_alias_[k] = v
+
+    def unalias_field(self, fld_name):
+        return getattr(self, fld_name, None)
+
+    @property
+    def tt(self):
+        return self.unalias_field('gch_tt')
+
+    @property
+    def marked(self):
+        return self.unalias_field('gch_marked')
+
+    @property
+    def memcat(self):
+        return self.unalias_field('gch_memcat')
+
+    @property
+    def gch_padding(self):
+        return self.unalias_field('gch_padding')
 
     def is_valid_gc_header(self) -> bool:
         return self.tt in VALID_OBJ_TYPES and self.marked in VALID_MARKS and self.padding == 0
@@ -74,23 +109,6 @@ class LuauSifterResult(object):
         return str(self)
 
 
-class LuauByfronSifterResult(LuauSifterResult):
-    KEY_VALUES = ["paddr",
-                  "vaddr",
-                  "sink_vaddr",
-                  "sink_paddr",
-                  "sink_value", "sink_paddr_base", "sink_vaddr_base", "vaddr_base", "paddr_base"
-                  ]
-
-    def __init__(self, **kargs):
-        super(LuauByfronSifterResult, self).__init__(**kargs)
-
-        if isinstance(self.sink_value, int):
-            self.marked = (self.sink_value & 0x000000ff)
-            self.tt = (self.sink_value & 0x0000ff00) >> 8
-            self.memcat = (self.sink_value & 0x00ff0000) >> 16
-            self.padding = (self.sink_value & 0xff000000) >> 24
-
 class LuauSifterResults(object):
     def __init__(self, byfron_sift_results=False):
         self.gco_srcs = {}
@@ -107,8 +125,7 @@ class LuauSifterResults(object):
             k: {} for k in VALID_OBJ_TYPES
         }
 
-        self.SifterResultCls = LuauSifterResult if not byfron_sift_results else LuauByfronSifterResult
-
+        self.SifterResultCls = LuauSifterResult # if not byfron_sift_results else LuauByfronSifterResult
 
     def add_pot_gco_sifter_result(self, r):
         self.gco_results[r.vaddr] = r
@@ -146,7 +163,7 @@ class LuauSifterResults(object):
             tts = [tt]
         r = {}
         for tt in tts:
-            r.update({k:v for k,v in self.pot_lua_gco[tt].itemes()})
+            r.update({k: v for k, v in self.pot_lua_gco[tt].itemes()})
         return r
 
     def get_strings(self) -> dict[int, LuauSifterResult]:
@@ -200,4 +217,3 @@ class LuauSifterResults(object):
         pot_objects = list(self.all_pot_gco.values())
         return sorted([i for i in pot_objects if i.tt == TSTRING and i.marked in VALID_MARKS],
                       key=lambda u: u.sink_vaddr)
-
