@@ -3,3 +3,4 @@ numpy
 pandas
 ipython
 json-fix
+lz4

@@ -258,7 +258,7 @@ class LuauRobloxAnalysis(Analysis):
     def is_sift_results_loaded(self) -> bool:
         return self.sift_results_loaded
 
-    def scan_lua_pages_gco(self, add_obj=False, scan_entire_block=False, do_sanity_check=True) -> [
+    def scan_lua_pages_gco(self, add_obj=False, scan_entire_block=False, do_sanity_check=True, max_size=DEFAULT_MAX_SIZE) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
         LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         lpages = self.lua_pages.get_pages()
@@ -270,6 +270,9 @@ class LuauRobloxAnalysis(Analysis):
             # evaluate whether this lua_Page is relevant and should be searched
             if any([i[0] < lpage.addr < i[1] for i in checked]):
                 self.log.debug("lua_Page already checked, lua_Page @ 0x{:08x} ".format(lpage.addr))
+                continue
+            elif lpage.pageSize >= max_size:
+                self.log.debug("lua_Page exceeds max_size, lua_Page @ 0x{:08x} ".format(lpage.addr))
                 continue
             # elif lpage.pageSize > 0x8000 or lpage.pageSize <= 0x100:
             #     self.log.debug(
@@ -311,6 +314,8 @@ class LuauRobloxAnalysis(Analysis):
                     r = [gco]
                 if gco is not None and do_sanity_check:
                     r = self.sanity_check(gco, add_obj=add_obj, printable_strings=printable_strings, tables=tables)
+                elif gco is not None and add_obj:
+                    self.add_gc_object(gco_addr, gco)
                 if isinstance(r, list) and len(r) > 0:
                     # self.log.debug("Found new gco @ 0x{:08x} tt: {} ".format(gco_addr, gco.tt))
                     incr = gco.get_total_size()
@@ -1386,7 +1391,7 @@ class LuauRobloxAnalysis(Analysis):
         offset = lua_page.freeNext + lua_page.get_offset('data') + lua_page.blockSize
         return lua_page.addr + offset
 
-    def scan_lua_pages_tvalue(self, add_obj=False, num_threads=None, pot_gco=None, pot_tval=None, pot_tt=None, do_sanity_check=True):
+    def scan_lua_pages_tvalue(self, add_obj=False, num_threads=None, pot_gco=None, pot_tval=None, pot_tt=None, do_sanity_check=True, max_size=DEFAULT_MAX_SIZE):
         lua_pages = self.lua_pages.get_pages()
         pot_gco = {} if pot_gco is None else pot_gco
         pot_tval = {} if pot_tval is None else pot_tval
@@ -1398,6 +1403,9 @@ class LuauRobloxAnalysis(Analysis):
             active_threads = []
             while len(lua_pages) > 0:
                 lp = lua_pages.pop(0)
+                if lp.pageSize >= max_size:
+                    self.log.debug("lua_Page exceeds max_size, lua_Page @ 0x{:08x} ".format(lp.addr))
+                    continue
                 cnt += 1
                 self.log.debug("Processing {} of {} lua_Pages ".format(cnt, num_lps))
                 t = Thread(target=self.scan_lua_page_tvalue,
@@ -1434,6 +1442,9 @@ class LuauRobloxAnalysis(Analysis):
             #    raise
         if True:
             for lp in lua_pages:
+                if lp.pageSize >= max_size:
+                    self.log.debug("lua_Page exceeds max_size, lua_Page @ 0x{:08x} ".format(lp.addr))
+                    continue
                 self.log.debug(
                     "Scanning lua_Page {:08x} of size: {} for tvalues".format(lp.addr, lp.pageSize))
                 x = self.scan_lua_page_tvalue(lp, add_obj=add_obj, do_sanity_check=do_sanity_check)
@@ -1480,6 +1491,8 @@ class LuauRobloxAnalysis(Analysis):
                     r = [gco]
                 if gco is not None and do_sanity_check:
                     r = self.sanity_check(gco, add_obj=add_obj, printable_strings=printable_strings, tables=tables)
+                elif gco is not None and add_obj:
+                    self.add_gc_object(gco.addr, gco)
                 if isinstance(r, list) and len(r) > 0:
                     incr = ctypes.sizeof(self.TValueCls)
                     if a_lp is not None:
@@ -1674,13 +1687,13 @@ class LuauRobloxAnalysis(Analysis):
             for line in lines:
                 d = json.loads(line)
                 if 'dmp_file' in line:
-                    self.sift_results = line.get('sift_results', None)
-                    self.luapage_pointers_file = line.get('luapage_pointers_file', None)
-                    self.byfron_analysis = line.get('byfron_analysis', False)
-                    self.save_state_file = line.get('save_state_file', None)
-                    self.dmp_file = line.get('dmp_file', None)
-                    self.radare_file = line.get('radare_file', None)
-                    self.gch_field_order = line.get('gch_field_order', None)
+                    self.sift_results = d.get('sift_results', None)
+                    self.luapage_pointers_file = d.get('luapage_pointers_file', None)
+                    self.byfron_analysis = d.get('byfron_analysis', False)
+                    self.save_state_file = d.get('save_state_file', None)
+                    self.dmp_file = d.get('dmp_file', None)
+                    self.radare_file = d.get('radare_file', None)
+                    self.gch_field_order = d.get('gch_field_order', None)
                     self.update_unscramble_mapping()
                     continue
                 addr = d['addr']
