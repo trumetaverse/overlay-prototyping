@@ -34,6 +34,7 @@ class LuauSifterResult(object):
         self.sink_paddr_base = 0
         self.sink_value = 0
         self.gcheader = None
+        self.padding = -1
 
         for k, v in kargs.items():
             if k in self.KEY_VALUES and v != "null":

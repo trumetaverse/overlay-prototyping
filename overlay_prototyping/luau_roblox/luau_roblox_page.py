@@ -1,11 +1,10 @@
 import struct
 
-from .overlay_base import *
 from .overlay_base import LuauRW_lua_Page
 from .overlay_byfron import LuauRWB_lua_Page
 from ..base import *
 
-int_to_bytes = lambda x: struct.pack(">I", d)
+int_to_bytes = lambda x: struct.pack(">I", x)
 
 
 class LuaPage(object):

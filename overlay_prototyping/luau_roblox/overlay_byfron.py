@@ -340,6 +340,35 @@ class LuauRWB_BaseUnion(Transmute_BaseLEU):
         return fld is not None and fld.tt in {TNUMBER, TBOOLEAN, TVECTOR, TNIL}
 
 
+class LuauRWB_Value(LuauRWB_BaseUnion):
+    _OVERLAY_TYPE_ = 'LuauRW'
+    __field_def__ = {
+        "gc": {"type": "c_uint64"},
+        "p": {"type": "c_uint64"},
+        "n": {"type": "c_double"},
+        "b": {"type": "c_int32"},
+        "v": {"type": "c_float"},
+    }
+    _field_fixups_ = {"gc": "GCObject*", "p": "void*"}
+    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
+    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
+
+class LuauRWB_TValue(LuauRWB_BaseStruct):
+    _OVERLAY_TYPE_ = 'LuauRW'
+    __field_def__ = {
+        "value": {"type": "LuauRWB_Value"},
+        "extra": {"type": "c_uint32*1"},
+        "tvalue_tt": {"type": "c_uint32"},
+    }
+    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
+    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
+    _fields_alias_ = {
+        "tvalue_tt": "tvalue_tt"
+    }
+
+    @property
+    def tt(self):
+        return self.unalias_field("tvalue_tt")
 
 class LuauRWB_TString(LuauRWB_BaseStruct):
     _gco_ = True
@@ -351,7 +380,7 @@ class LuauRWB_TString(LuauRWB_BaseStruct):
         "gch_field_2": {"type": "c_uint8"},
         "gch_field_3": {"type": "c_uint8"},
         "atom": {"type": "c_uint16"},
-        "next": {"type": "c_uint32"},
+        "next": {"type": "c_uint64"},
         "hash": {"type": "c_uint32"},
         "end": {"type": "c_uint32"},
         # "data": {"type": "c_char"},
@@ -472,102 +501,6 @@ class LuauRWB_ForceAlignment(LuauRWB_BaseUnion):
     _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
 
 
-class LuauRWB_Value(LuauRWB_BaseUnion):
-    _OVERLAY_TYPE_ = 'LuauRW'
-    __field_def__ = {
-        "gc": {"type": "c_uint32"},
-        "p": {"type": "c_uint32"},
-        "n": {"type": "c_double"},
-        "b": {"type": "c_int32"},
-        "v": {"type": "c_float"},
-    }
-    _field_fixups_ = {"gc": "GCObject*", "p": "void*"}
-    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
-    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
-
-class LuauRWB_TValue(LuauRWB_BaseStruct):
-    _OVERLAY_TYPE_ = 'LuauRW'
-    __field_def__ = {
-        "value": {"type": "LuauRWB_Value"},
-        "extra": {"type": "c_uint32*1"},
-        "tvalue_tt": {"type": "c_uint32"},
-    }
-    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
-    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
-    _fields_alias_ = {
-        "tvalue_tt": "tvalue_tt"
-    }
-
-    @property
-    def tt(self):
-        return self.unalias_field("tvalue_tt")
-
-class LuauRWB_TableArrayBoundary(LuauRWB_BaseUnion):
-    __field_def__ = {
-        "lastfree": {"type": "c_uint32"},
-        "aboundary": {"type": "c_uint32"},
-    }
-    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
-    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
-
-
-class LuauRWB_Table(LuauRWB_BaseStruct):
-    _gco_ = True
-    _has_sanity_check_ = True
-    _tt_ = TTABLE
-    __field_def__ = {
-        "gch_field_0": {"type": "c_uint8"},
-        "gch_field_1": {"type": "c_uint8"},
-        "gch_field_2": {"type": "c_uint8"},
-        "gch_field_3": {"type": "c_uint8"},
-
-        "tmcache": {"type": "c_uint8"},
-        "readonly": {"type": "c_uint8"},
-        "safeenv": {"type": "c_uint8"},
-        "lsizenode": {"type": "c_uint8"},
-        "nodemask8": {"type": "c_uint8"},
-        "sizearray": {"type": "c_uint32"},
-        # "lastfree_aboundary": {"type": "c_uint32"},
-        #  Original
-        # "__anonymous__": {"type": "LuauRWB_BaseUnionArrayBoundary"},
-        # "metatable": {"type": "c_uint32"},  # Table*
-        #  Swapped after some analysis
-        "metatable": {"type": "c_uint32"},  # Table*
-        "__anonymous__": {"type": "LuauRWB_TableArrayBoundary"},
-        "array": {"type": "c_uint32"},
-        "node": {"type": "c_uint32"},
-        "gclist": {"type": "c_uint32"},
-    }
-    _field_fixups_ = {
-        "metatable": "Table*",
-        "array": "TValue*",
-        "node": "LuaNode*",
-        "gclist": "GCObject*"
-    }
-    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
-    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
-
-    def sanity_check(self):
-        return self.is_valid_gc_header()
-
-    def get_next_gco(self):
-        return self.addr + self.get_total_size()-self.word_sz
-
-    def get_tvalue_address(self, index):
-        return self.addr + self.get_offset('array') + index * ctypes.sizeof(LuauRWB_TValue)
-
-class LuauRWB_LocVar(LuauRWB_BaseStruct):
-    __field_def__ = {
-        "varname": {"type": "c_uint32"},  # TString*
-        "startpc": {"type": "c_uint8"},
-        "endpc": {"type": "c_uint8"},
-        "reg": {"type": "c_uint8"},
-    }
-    _field_fixups_ = {"varname": "TString*"}
-    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
-    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
-
-
 class LuauRWB_Udata(LuauRWB_BaseStruct):
     _gco_ = True
     _has_sanity_check_ = True
@@ -579,65 +512,11 @@ class LuauRWB_Udata(LuauRWB_BaseStruct):
         "gch_field_3": {"type": "c_uint8"},
         "tag": {"type": "c_uint8"},
         "len": {"type": "c_int32"},
-        "metatable": {"type": "c_uint32"},
+        "metatable": {"type": "c_uint64"},
         "data": {"type": "LuauRWB_ForceAlignment"},
     }
     _field_fixups_ = {
         "metatable": "Table*",
-    }
-    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
-    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
-
-    def sanity_check(self):
-        return self.is_valid_gc_header()
-
-    def get_next_gco(self):
-        return self.addr + self.get_total_size()
-
-
-class LuauRWB_UpValOpenUnion(LuauRWB_BaseUnion):
-    __field_def__ = {
-        "prev": {"type": "c_uint32"},
-        "next": {"type": "c_uint32"},
-        "thread": {"type": "c_uint32"},
-    }
-    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
-    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
-    _field_fixups_ = {
-        "prev": "UpVal*",
-        "next": "UpVal*",
-        "thread": "UpVal*",
-    }
-
-
-class LuauRWB_UpValUnion(LuauRWB_BaseUnion):
-    __field_def__ = {
-        "value": {"type": "LuauRWB_TValue"},
-        "open": {"type": "LuauRWB_UpValOpenUnion"},
-    }
-    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
-    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
-
-
-class LuauRWB_UpVal(LuauRWB_BaseStruct):
-    _gco_ = True
-    _has_sanity_check_ = True
-    _tt_ = TUPVAL
-    __field_def__ = {
-        "gch_field_0": {"type": "c_uint8"},
-        "gch_field_1": {"type": "c_uint8"},
-        "gch_field_2": {"type": "c_uint8"},
-        "gch_field_3": {"type": "c_uint8"},
-
-        "markedopen": {"type": "c_int8"},
-        "v": {"type": "c_uint32"},
-
-        "u": {"type": "LuauRWB_UpValUnion"},
-        "metatable": {"type": "c_uint32"},
-        "data": {"type": "c_uint8*8"},
-    }
-    _field_fixups_ = {
-        "v": "TValue*",
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
     _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
@@ -653,24 +532,23 @@ class LuauRWB_Proto(LuauRWB_BaseStruct):
     _has_sanity_check_ = True
     _tt_ = TPROTO
     __field_def__ = {
-
         "gch_field_0": {"type": "c_uint8"},
         "gch_field_1": {"type": "c_uint8"},
         "gch_field_2": {"type": "c_uint8"},
         "gch_field_3": {"type": "c_uint8"},
 
-        "k": {"type": "c_uint32"},
-        "code": {"type": "c_uint32"},
-        "p": {"type": "c_uint32"},
-        "lineinfo": {"type": "c_uint32"},
-        "abslineinfo": {"type": "c_uint32"},
-        "locvars": {"type": "c_uint32"},
-        "upvalues": {"type": "c_uint32"},
-        "source": {"type": "c_uint32"},
-        "debugname": {"type": "c_uint32"},
-        "debuginsn": {"type": "c_uint32"},
-        # "execdata": {"type": "c_uint32"},
-        "gclist": {"type": "c_uint32"},
+        "k": {"type": "c_uint64"},
+        "code": {"type": "c_uint64"},
+        "p": {"type": "c_uint64"},
+        "lineinfo": {"type": "c_uint64"},
+        "abslineinfo": {"type": "c_uint64"},
+        "locvars": {"type": "c_uint64"},
+        "upvalues": {"type": "c_uint64"},
+        "source": {"type": "c_uint64"},
+        "debugname": {"type": "c_uint64"},
+        "debuginsn": {"type": "c_uint64"},
+        # "execdata": {"type": "c_uint64"},
+        "gclist": {"type": "c_uint64"},
         "sizecode": {"type": "c_int32"},
         "sizep": {"type": "c_int32"},
         "sizelocvars": {"type": "c_int32"},
@@ -719,18 +597,18 @@ class LuauRWB_ProtoECB(LuauRWB_BaseStruct):
         "gch_field_2": {"type": "c_uint8"},
         "gch_field_3": {"type": "c_uint8"},
 
-        "k": {"type": "c_uint32"},
-        "code": {"type": "c_uint32"},
-        "p": {"type": "c_uint32"},
-        "lineinfo": {"type": "c_uint32"},
-        "abslineinfo": {"type": "c_uint32"},
-        "locvars": {"type": "c_uint32"},
-        "upvalues": {"type": "c_uint32"},
-        "source": {"type": "c_uint32"},
-        "debugname": {"type": "c_uint32"},
-        "debuginsn": {"type": "c_uint32"},
-        "execdata": {"type": "c_uint32"},
-        "gclist": {"type": "c_uint32"},
+        "k": {"type": "c_uint64"},
+        "code": {"type": "c_uint64"},
+        "p": {"type": "c_uint64"},
+        "lineinfo": {"type": "c_uint64"},
+        "abslineinfo": {"type": "c_uint64"},
+        "locvars": {"type": "c_uint64"},
+        "upvalues": {"type": "c_uint64"},
+        "source": {"type": "c_uint64"},
+        "debugname": {"type": "c_uint64"},
+        "debuginsn": {"type": "c_uint64"},
+        "execdata": {"type": "c_uint64"},
+        "gclist": {"type": "c_uint64"},
         "sizecode": {"type": "c_int32"},
         "sizep": {"type": "c_int32"},
         "sizelocvars": {"type": "c_int32"},
@@ -746,6 +624,7 @@ class LuauRWB_ProtoECB(LuauRWB_BaseStruct):
         "is_vararg": {"type": "c_uint8"},
         "maxstacksize": {"type": "c_uint8"},
     }
+
     _field_fixups_ = {
         "k": "TValue*",
         "code": "Instruction*",
@@ -764,11 +643,135 @@ class LuauRWB_ProtoECB(LuauRWB_BaseStruct):
     _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
 
 
+
+
+class LuauRWB_TableArrayBoundary(LuauRWB_BaseUnion):
+    __field_def__ = {
+        "lastfree": {"type": "c_uint32"},
+        "aboundary": {"type": "c_uint32"},
+    }
+    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
+    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
+
+
+class LuauRWB_Table(LuauRWB_BaseStruct):
+    _gco_ = True
+    _has_sanity_check_ = True
+    _tt_ = TTABLE
+    __field_def__ = {
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
+
+        "tmcache": {"type": "c_uint8"},
+        "readonly": {"type": "c_uint8"},
+        "safeenv": {"type": "c_uint8"},
+        "lsizenode": {"type": "c_uint8"},
+        "nodemask8": {"type": "c_uint8"},
+        "sizearray": {"type": "c_uint32"},
+        # "lastfree_aboundary": {"type": "c_uint32"},
+        #  Original
+        # "__anonymous__": {"type": "LuauRWB_BaseUnionArrayBoundary"},
+        # "metatable": {"type": "c_uint32"},  # Table*
+        #  Swapped after some analysis
+        "__anonymous__": {"type": "LuauRWB_TableArrayBoundary"},
+        "metatable": {"type": "c_uint64"},  # Table*
+        "array": {"type": "c_uint64"},
+        "node": {"type": "c_uint64"},
+        "gclist": {"type": "c_uint64"},
+    }
+    _field_fixups_ = {
+        "metatable": "Table*",
+        "array": "TValue*",
+        "node": "LuaNode*",
+        "gclist": "GCObject*"
+    }
+    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
+    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
+
+    def sanity_check(self):
+        return self.is_valid_gc_header()
+
+    def get_next_gco(self):
+        return self.addr + self.get_total_size()-self.word_sz
+
+    def get_tvalue_address(self, index):
+        return self.addr + self.get_offset('array') + index * ctypes.sizeof(LuauRWB_TValue)
+
+class LuauRWB_LocVar(LuauRWB_BaseStruct):
+    __field_def__ = {
+        "varname": {"type": "c_uint64"},  # TString*
+        "startpc": {"type": "c_uint8"},
+        "endpc": {"type": "c_uint8"},
+        "reg": {"type": "c_uint8"},
+    }
+    _field_fixups_ = {"varname": "TString*"}
+    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
+    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
+
+
+
+class LuauRWB_UpValOpenUnion(LuauRWB_BaseUnion):
+    __field_def__ = {
+        "prev": {"type": "c_uint64"},
+        "next": {"type": "c_uint64"},
+        "thread": {"type": "c_uint64"},
+    }
+    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
+    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
+    _field_fixups_ = {
+        "prev": "UpVal*",
+        "next": "UpVal*",
+        "thread": "UpVal*",
+    }
+
+
+class LuauRWB_UpValUnion(LuauRWB_BaseUnion):
+    __field_def__ = {
+        "value": {"type": "LuauRWB_TValue"},
+        "open": {"type": "LuauRWB_UpValOpenUnion"},
+    }
+    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
+    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
+
+
+class LuauRWB_UpVal(LuauRWB_BaseStruct):
+    _gco_ = True
+    _has_sanity_check_ = True
+    _tt_ = TUPVAL
+    __field_def__ = {
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
+
+        "markedopen": {"type": "c_int8"},
+        "v": {"type": "c_uint64"},
+
+        "u": {"type": "LuauRWB_UpValUnion"},
+        # "metatable": {"type": "c_uint32"},
+        # "data": {"type": "c_uint8*8"},
+    }
+    _field_fixups_ = {
+        "v": "TValue*",
+    }
+    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
+    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
+
+    def sanity_check(self):
+        return self.is_valid_gc_header()
+
+    def get_next_gco(self):
+        return self.addr + self.get_total_size()
+
+
+
 class LuauRWB_ClosureContinuation(LuauRWB_BaseStruct):
     __field_def__ = {
-        "f": {"type": "c_uint32"},
-        "cont": {"type": "c_uint32"},
-        "debugname": {"type": "c_uint32"},
+        "f": {"type": "c_uint64"},
+        "cont": {"type": "c_uint64"},
+        "debugname": {"type": "c_uint64"},
         "upvals": {"type": "LuauRWB_UpVal"},
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
@@ -782,7 +785,7 @@ class LuauRWB_ClosureContinuation(LuauRWB_BaseStruct):
 
 class LuauRWB_ClosureProto(LuauRWB_BaseStruct):
     __field_def__ = {
-        "p": {"type": "c_uint32"},
+        "p": {"type": "c_uint64"},
         "uprefs": {"type": "LuauRWB_UpVal"},
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
@@ -816,8 +819,8 @@ class LuauRWB_Closure(LuauRWB_BaseStruct):
         "stacksize": {"type": "c_uint8"},
         "preload": {"type": "c_uint8"},
 
-        "gclist": {"type": "c_uint32"},
-        "env": {"type": "c_uint32"},
+        "gclist": {"type": "c_uint64"},
+        "env": {"type": "c_uint64"},
         "__anonymous__": {"type": "LuauRWB_ClosureUnion"}
     }
     _field_fixups_ = {
@@ -874,11 +877,11 @@ class LuauRWB_LuaNode(LuauRWB_BaseStruct):
 
 class LuauRWB_CallInfo(LuauRWB_BaseStruct):
     __field_def__ = {
-        "base": {"type": "c_uint32"},
-        "func": {"type": "c_uint32"},
-        "top": {"type": "c_uint32"},
+        "base": {"type": "c_uint64"},
+        "func": {"type": "c_uint64"},
+        "top": {"type": "c_uint64"},
 
-        "savedpc": {"type": "c_uint32"},
+        "savedpc": {"type": "c_uint64"},
         "nresults": {"type": "c_uint32"},
         "flags": {"type": "c_uint32"},
     }
@@ -899,9 +902,9 @@ class LuauRWB_GCStats(LuauRWB_BaseStruct):
         "triggertermpos": {"type": "c_uint32"},
         "triggerintegral": {"type": "c_int32"},
 
-        "atomicstarttotalsizebytes": {"type": "c_uint32"},
-        "endtotalsizebytes": {"type": "c_uint32"},
-        "heapgoalsizebytes": {"type": "c_uint32"},
+        "atomicstarttotalsizebytes": {"type": "c_uint64"},
+        "endtotalsizebytes": {"type": "c_uint64"},
+        "heapgoalsizebytes": {"type": "c_uint64"},
 
         "starttimestamp": {"type": "c_double"},
         "atomicstarttimestamp": {"type": "c_double"},
@@ -913,11 +916,11 @@ class LuauRWB_GCStats(LuauRWB_BaseStruct):
 
 class LuauRWB_lua_ExecutionCallbacks(LuauRWB_BaseStruct):
     __field_def__ = {
-        "context": {"type": "c_uint32"},
-        "close": {"type": "c_uint32"},
-        "destroy": {"type": "c_uint32"},
-        "enter": {"type": "c_uint32"},
-        "setbreakpoint": {"type": "c_uint32"},
+        "context": {"type": "c_uint64"},
+        "close": {"type": "c_uint64"},
+        "destroy": {"type": "c_uint64"},
+        "enter": {"type": "c_uint64"},
+        "setbreakpoint": {"type": "c_uint64"},
 
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
@@ -933,16 +936,16 @@ class LuauRWB_lua_ExecutionCallbacks(LuauRWB_BaseStruct):
 
 class LuauRWB_lua_Callbacks(LuauRWB_BaseStruct):
     __field_def__ = {
-        "userdata": {"type": "c_uint32"},
-        "interrupt": {"type": "c_uint32"},
-        "panic": {"type": "c_uint32"},
-        "userthread": {"type": "c_uint32"},
-        "useratom": {"type": "c_uint32"},
+        "userdata": {"type": "c_uint64"},
+        "interrupt": {"type": "c_uint64"},
+        "panic": {"type": "c_uint64"},
+        "userthread": {"type": "c_uint64"},
+        "useratom": {"type": "c_uint64"},
 
-        "debugbreak": {"type": "c_uint32"},
-        "debugstep": {"type": "c_uint32"},
-        "debuginterrupt": {"type": "c_uint32"},
-        "debugprotectederror": {"type": "c_uint32"},
+        "debugbreak": {"type": "c_uint64"},
+        "debugstep": {"type": "c_uint64"},
+        "debuginterrupt": {"type": "c_uint64"},
+        "debugprotectederror": {"type": "c_uint64"},
 
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
@@ -964,11 +967,10 @@ class LuauRWB_lua_Callbacks(LuauRWB_BaseStruct):
 
 class LuauRWB_stringtable(LuauRWB_BaseStruct):
     __field_def__ = {
-        "hash": {"type": "c_uint32"},
+        "hash": {"type": "c_uint64"},
         "nuse": {"type": "c_uint32"},
         "size": {"type": "c_int32"},
-        "enter": {"type": "c_uint32"},
-
+        # "enter": {"type": "c_uint32"},
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
     _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
@@ -992,15 +994,15 @@ class LuauRWB_lua_State(LuauRWB_BaseStruct):
         "isactive": {"type": "c_uint8"},
         "singlestep": {"type": "c_uint8"},
 
-        "top": {"type": "c_uint32"},
-        "base": {"type": "c_uint32"},
-        "global_State": {"type": "c_uint32"},
-        "ci": {"type": "c_uint32"},
-        "stack_last": {"type": "c_uint32"},
-        "stack": {"type": "c_uint32"},
+        "top": {"type": "c_uint64"},
+        "base": {"type": "c_uint64"},
+        "global_State": {"type": "c_uint64"},
+        "ci": {"type": "c_uint64"},
+        "stack_last": {"type": "c_uint64"},
+        "stack": {"type": "c_uint64"},
 
-        "end_ci": {"type": "c_uint32"},
-        "base_ci": {"type": "c_uint32"},
+        "end_ci": {"type": "c_uint64"},
+        "base_ci": {"type": "c_uint64"},
 
         "stacksize": {"type": "c_int32"},
         "size_ci": {"type": "c_int32"},
@@ -1010,13 +1012,13 @@ class LuauRWB_lua_State(LuauRWB_BaseStruct):
 
         "cachedslot": {"type": "c_int32"},
 
-        "gt": {"type": "c_uint32"},
-        "openupval": {"type": "c_uint32"},
-        "gclist": {"type": "c_uint32"},
+        "gt": {"type": "c_uint64"},
+        "openupval": {"type": "c_uint64"},
+        "gclist": {"type": "c_uint64"},
 
-        "namecall": {"type": "c_uint32"},
+        "namecall": {"type": "c_uint64"},
 
-        "userdata": {"type": "c_uint32"},
+        "userdata": {"type": "c_uint64"},
 
     }
     _field_fixups_ = {
@@ -1047,49 +1049,65 @@ class LuauRWB_lua_State(LuauRWB_BaseStruct):
         return self.is_valid_gc_header()
     def get_next_gco(self):
         return self.addr + self.get_total_size()
+
+class LuauRWB_lua_jmpbuf(LuauRWB_BaseStruct):
+    __field_def__ = {
+        "prev": {"type": "c_uint64"},
+        "status": {"type": "c_uint32"},
+        "buf": {"type": "c_uint64"},
+    }
+
+    _field_fixups_ = {
+        "prev": "lua_jmpbuf*"
+    }
 class LuauRWB_global_State(LuauRWB_BaseStruct):
     __field_def__ = {
         "strt": {"type": "LuauRWB_stringtable"},
 
-        "frealloc": {"type": "c_uint32"},
-        "ud": {"type": "c_uint32"},
+        "frealloc": {"type": "c_uint64"},
+        "ud": {"type": "c_uint64"},
 
         "currentwhite": {"type": "c_uint8"},
         "gcstate": {"type": "c_uint8"},
 
-        "gray": {"type": "c_uint32"},
-        "grayagain": {"type": "c_uint32"},
-        "weak": {"type": "c_uint32"},
+        "gray": {"type": "c_uint64"},
+        "grayagain": {"type": "c_uint64"},
+        "weak": {"type": "c_uint64"},
 
-        "GCthreshold": {"type": "c_uint32"},
-        "totalbytes": {"type": "c_uint32"},
+        "GCthreshold": {"type": "c_uint64"},
+        "totalbytes": {"type": "c_uint64"},
 
         "gcgoal": {"type": "c_int32"},
         "gcstepmul": {"type": "c_int32"},
         "gcstepsize": {"type": "c_int32"},
 
-        "freepages": {"type": "c_uint32*LUA_SIZECLASSES"},
-        "freecopages": {"type": "c_uint32*LUA_SIZECLASSES"},
-        "allgcopages": {"type": "c_uint32"},
-        "sweepgcopages": {"type": "c_uint32"},
+        "freepages": {"type": "c_uint64*LUA_SIZECLASSES"},
+        "freecopages": {"type": "c_uint64*LUA_SIZECLASSES"},
+        "allgcopages": {"type": "c_uint64"},
+        "sweepgcopages": {"type": "c_uint64"},
 
         "memcatbytes": {"type": "c_uint32*LUA_MEMORY_CATEGORIES"},
 
-        "mainthread": {"type": "c_uint32"},
+        "mainthread": {"type": "c_uint64"},
 
         "uvhead": {"type": "LuauRWB_UpVal"},
 
-        "mt": {"type": "c_uint32 * LUA_T_COUNT"},
-        "ttname": {"type": "c_uint32 * LUA_T_COUNT"},
-        "tmname": {"type": "c_uint32 * TMS_CNT"},
+        "mt": {"type": "c_uint64 * LUA_T_COUNT"},
+        "ttname": {"type": "c_uint64 * LUA_T_COUNT"},
+        "tmname": {"type": "c_uint64 * TMS_CNT"},
         "pseudotemp": {"type": "LuauRWB_TValue"},
-        "registry": {"type": "c_int32"},
-        "errorjmp": {"type": "c_uint32"},
+
+        "registry": {"type": "TValue"},
+        "registryfree": {"type": "c_int32"},
+
+        "errorjmp": {"type": "c_uint64"},
         "rngstate": {"type": "c_uint64"},
         "ptrenckey": {"type": "c_uint64*4"},
-        "udatagc": {"type": "c_uint32"},
+
         "cb": {"type": "LuauRWB_lua_Callbacks"},
+        # TODO determine if this field is even valid in client
         "ecb": {"type": "LuauRWB_lua_ExecutionCallbacks"},
+        "udatagc": {"type": "c_uint32"},
         "gcstats": {"type": "LuauRWB_GCStats"},
     }
     _field_fixups_ = {
@@ -1112,6 +1130,7 @@ class LuauRWB_global_State(LuauRWB_BaseStruct):
         "mt": "Table* [LUA_T_COUNT]",
         "ttname": "TString* [LUA_T_COUNT]",
         "tmname": "TString* [LUA_T_COUNT]",
+        "errorjmp":"lua_jmpbuf*",
         "udatagc": "void (*udatagc[LUA_UTAG_LIMIT])(lua_State*, void*)",
 
     }
@@ -1147,16 +1166,16 @@ class LuauRWB_GCObjectUnion(LuauRWB_BaseUnion):
 
 class LuauRWB_lua_Page(LuauRWB_BaseStruct):
     __field_def__ = {
-        "prev": {"type": "c_uint32"},
-        "next": {"type": "c_uint32"},
+        "prev": {"type": "c_uint64"},
+        "next": {"type": "c_uint64"},
 
-        "gcolistprev": {"type": "c_uint32"},
-        "gcolistnext": {"type": "c_uint32"},
+        "gcolistprev": {"type": "c_uint64"},
+        "gcolistnext": {"type": "c_uint64"},
 
         "pageSize": {"type": "c_int32"},
         "blockSize": {"type": "c_int32"},
 
-        "freeList": {"type": "c_uint32"},
+        "freeList": {"type": "c_uint64"},
         "freeNext": {"type": "c_int32"},
         "busyBlocks": {"type": "c_int32"},
 
@@ -1172,22 +1191,8 @@ class LuauRWB_lua_Page(LuauRWB_BaseStruct):
 
         "gcolistprev": "lua_Page*",
         "gcolistnext": "lua_Page*",
+        "gcolistnext": "void*",
 
-        "global": "global_State*",
-        "ci": "CallInfo*",
-        "stack_last": "TValue*",
-        "stack": "TValue*",
-
-        "end_ci": "CallInfo*",
-        "base_ci": "CallInfo*",
-
-        "gt": "Table*",
-        "openupval": "UpVal*",
-        "gclist": "GCObject*",
-
-        "namecall": "TString*",
-
-        "userdata": "c_void_p",
     }
 
 
@@ -1202,25 +1207,30 @@ class LuauRWB_LG(LuauRWB_BaseStruct):
 
 class LuauRWB_CodeAllocator(LuauRWB_BaseStruct):
     __field_def__ = {
-        "context": {"type": "c_uint32"},
-        "createBlockUnwindInfo": {"type": "c_uint32"},
-        "destroyBlockUnwindInfo": {"type": "c_uint32"},
-        "kMaxReservedDataSize": {"type": "c_uint32"},
-        "blockPos": {"type": "c_uint32"},
-        "blockEnd": {"type": "c_uint32"},
-        "blocks": {"type": "c_uint32"},
-        "maxTotalSize": {"type": "c_uint32"},
+        "context": {"type": "c_uint64"},
+        "createBlockUnwindInfo": {"type": "c_uint64"},
+        "destroyBlockUnwindInfo": {"type": "c_uint64"},
+        "kMaxReservedDataSize": {"type": "c_uint64"},
+        "blockPos": {"type": "c_uint64"},
+        "blockEnd": {"type": "c_uint64"},
+        "blocks": {"type": "c_uint64"},
+        "unwindInfos": {"type": "c_uint64"},
+        "blockSize": {"type": "c_uint64"},
+        "maxTotalSize": {"type": "c_uint64"},
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
     _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
     _field_fixups_ = {
-        # TODO Fill this in
+        "context":"void*",
+        "createBlockUnwindInfo": "void* (*createBlockUnwindInfo)(void* context, uint8_t* block, size_t blockSize, size_t& startOffset)",
+        "blocks": "std::vector<uint8_t*>",
+        "unwindInfos": "std::vector<void*>",
     }
 
 
 class LuauRWB_NativeFallBack(LuauRWB_BaseStruct):
     __field_def__ = {
-        "fallback": {"type": "c_uint32"},
+        "fallback": {"type": "c_uint64"},
         "flags": {"type": "c_uint8"},
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
@@ -1232,11 +1242,10 @@ class LuauRWB_NativeFallBack(LuauRWB_BaseStruct):
 
 class LuauRWB_NativeProto(LuauRWB_BaseStruct):
     __field_def__ = {
-        "entryTarget": {"type": "c_uint32"},
-        "instTargets": {"type": "c_uint32"},
-
-        "proto": {"type": "c_uint32"},
-        "location": {"type": "c_uint32"},
+        "instOffsets": {"type": "c_uint64"},
+        "instBase": {"type": "c_uint64"},
+        "entryTarget": {"type": "c_uint64"},
+        "proto": {"type": "c_uint64"},
 
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
@@ -1250,57 +1259,71 @@ class LuauRWB_NativeProto(LuauRWB_BaseStruct):
 
 class LuauRWB_NativeContext(LuauRWB_BaseStruct):
     __field_def__ = {
-        "gateEntry": {"type": "c_uint32"},
-        "gateExit": {"type": "c_uint32"},
+        "gateEntry": {"type": "c_uint64"},
+        "gateExit": {"type": "c_uint64"},
 
-        "fallback": {"type": "LuauRWB_NativeFallBack*LOP__COUNT"},
-        "luauF_table": {"type": "c_uint32*256"},
+        # "fallback": {"type": "LuauRWB_NativeFallBack*LOP__COUNT"},
+        # "luauF_table": {"type": "c_uint64*256"},
 
-        "luaV_lessthan": {'type': 'c_uint32'},
-        "luaV_lessequal": {'type': 'c_uint32'},
-        "luaV_equalval": {'type': 'c_uint32'},
-        "luaV_doarith": {'type': 'c_uint32'},
-        "luaV_dolen": {'type': 'c_uint32'},
-        "luaV_prepareFORN": {'type': 'c_uint32'},
-        "luaV_gettable": {'type': 'c_uint32'},
-        "luaV_settable": {'type': 'c_uint32'},
-        "luaV_getimport": {'type': 'c_uint32'},
-        "luaV_concat": {'type': 'c_uint32'},
-        "luaH_getn": {'type': 'c_uint32'},
-        "luaH_new": {'type': 'c_uint32'},
-        "luaH_clone": {'type': 'c_uint32'},
-        "luaH_resizearray": {'type': 'c_uint32'},
-        "luaC_barriertable": {'type': 'c_uint32'},
-        "luaC_barrierf": {'type': 'c_uint32'},
-        "luaC_barrierback": {'type': 'c_uint32'},
-        "luaC_step": {'type': 'c_uint32'},
-        "luaF_close": {'type': 'c_uint32'},
-        "TValue": {'type': 'c_uint32'},
-        "libm_exp": {'type': 'c_uint32'},
-        "libm_pow": {'type': 'c_uint32'},
-        "libm_fmod": {'type': 'c_uint32'},
-        "libm_asin": {'type': 'c_uint32'},
-        "libm_sin": {'type': 'c_uint32'},
-        "libm_sinh": {'type': 'c_uint32'},
-        "libm_acos": {'type': 'c_uint32'},
-        "libm_cos": {'type': 'c_uint32'},
-        "libm_cosh": {'type': 'c_uint32'},
-        "libm_atan": {'type': 'c_uint32'},
-        "libm_atan2": {'type': 'c_uint32'},
-        "libm_tan": {'type': 'c_uint32'},
-        "libm_tanh": {'type': 'c_uint32'},
-        "libm_log": {'type': 'c_uint32'},
-        "libm_log2": {'type': 'c_uint32'},
-        "libm_log10": {'type': 'c_uint32'},
-        "libm_ldexp": {'type': 'c_uint32'},
-        "libm_round": {'type': 'c_uint32'},
-        "libm_frexp": {'type': 'c_uint32'},
-        "libm_modf": {'type': 'c_uint32'},
-        "forgLoopNodeIter": {'type': 'c_uint32'},
-        "forgLoopNonTableFallback": {'type': 'c_uint32'},
-        "forgPrepXnextFallback": {'type': 'c_uint32'},
-        "callProlog": {'type': 'c_uint32'},
-        "callEpilogC": {'type': 'c_uint32'},
+        "luaV_lessthan": {'type': 'c_uint64'},
+        "luaV_lessequal": {'type': 'c_uint64'},
+        "luaV_equalval": {'type': 'c_uint64'},
+        "luaV_doarith": {'type': 'c_uint64'},
+        "luaV_dolen": {'type': 'c_uint64'},
+        "luaV_prepareFORN": {'type': 'c_uint64'},
+        "luaV_gettable": {'type': 'c_uint64'},
+        "luaV_settable": {'type': 'c_uint64'},
+        "luaV_getimport": {'type': 'c_uint64'},
+        "luaV_concat": {'type': 'c_uint64'},
+
+        "luaH_getn": {'type': 'c_uint64'},
+        "luaH_new": {'type': 'c_uint64'},
+        "luaH_clone": {'type': 'c_uint64'},
+        "luaH_resizearray": {'type': 'c_uint64'},
+
+        "luaC_barriertable": {'type': 'c_uint64'},
+        "luaC_barrierf": {'type': 'c_uint64'},
+        "luaC_barrierback": {'type': 'c_uint64'},
+        "luaC_step": {'type': 'c_uint64'},
+
+        "luaF_close": {'type': 'c_uint64'},
+
+        "luaT_gettm": {'type': 'c_uint64'},
+        "luaT_objtypenamestr": {'type': 'c_uint64'},
+
+        "libm_exp": {'type': 'c_uint64'},
+        "libm_pow": {'type': 'c_uint64'},
+        "libm_fmod": {'type': 'c_uint64'},
+        "libm_asin": {'type': 'c_uint64'},
+        "libm_sin": {'type': 'c_uint64'},
+        "libm_sinh": {'type': 'c_uint64'},
+        "libm_acos": {'type': 'c_uint64'},
+        "libm_cos": {'type': 'c_uint64'},
+        "libm_cosh": {'type': 'c_uint64'},
+        "libm_atan": {'type': 'c_uint64'},
+        "libm_atan2": {'type': 'c_uint64'},
+        "libm_tan": {'type': 'c_uint64'},
+        "libm_tanh": {'type': 'c_uint64'},
+        "libm_log": {'type': 'c_uint64'},
+        "libm_log2": {'type': 'c_uint64'},
+        "libm_log10": {'type': 'c_uint64'},
+        "libm_ldexp": {'type': 'c_uint64'},
+        "libm_round": {'type': 'c_uint64'},
+        "libm_frexp": {'type': 'c_uint64'},
+        "libm_modf": {'type': 'c_uint64'},
+
+        "forgLoopTableIter": {'type': 'c_uint64'},
+        "forgLoopNodeIter": {'type': 'c_uint64'},
+        "forgLoopNonTableFallback": {'type': 'c_uint64'},
+        "forgPrepXnextFallback": {'type': 'c_uint64'},
+
+        "callProlog": {'type': 'c_uint64'},
+        "callEpilogC": {'type': 'c_uint64'},
+        "callFallback": {'type': 'c_uint64'},
+        "returnFallback":  {'type': 'c_uint64'},
+
+        "fallback":{'type': 'c_uint64 * LOP__COUNT'},
+        "luauF_table": {'type': 'c_uint64 * 256'},
 
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
@@ -1378,11 +1401,27 @@ class LuauRWB_ConstantValue(LuauRWB_BaseUnion):
         "valueBoolean": {"type": "c_uint32"},
         "valueNumber": {"type": "c_double"},
         "valueString": {"type": "c_uint32"},
+        "valueImport": {"type": "c_uint32"},
+        "valueTable": {"type": "c_uint32"},
+        "valueClosure": {"type": "c_uint32"},
     }
     _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
     _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
     _type_enums_ = [i for i in COMPILER_TYPES_MAPPING.values() if isinstance(i, int)]
     _type_string_enums_ = [COMPILER_TYPES_MAPPING[i] for i in COMPILER_TYPES_MAPPING.values() if isinstance(i, int)]
+
+
+class LuauRWB_ConstantKey(LuauRWB_BaseStruct):
+    __field_def__ = {
+        "type": {"type": "c_uint32"},
+        "value": {"type": "c_uint64"},
+    }
+    _fields_ = LuauRWB_BaseStruct.create_fields(__field_def__)
+    _fields_dict_ = LuauRWB_BaseStruct.create_fields_dict(__field_def__)
+    _field_fixups_ = {}
+    _type_enums_ = [i for i in COMPILER_TYPES_MAPPING.values() if isinstance(i, int)]
+    _type_string_enums_ = [COMPILER_TYPES_MAPPING[i] for i in COMPILER_TYPES_MAPPING.values() if isinstance(i, int)]
+
 
 
 class LuauRWB_Constant(LuauRWB_BaseStruct):

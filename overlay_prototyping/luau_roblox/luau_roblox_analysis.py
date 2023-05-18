@@ -4,12 +4,13 @@ import string
 import threading
 import time
 from threading import Thread
+from typing import List
 
 from .consts import *
 from .enumerate_luau_roblox import LuauSifterResults, LuauSifterResult
 from .luau_roblox_page import LuaPages
 # from .luau_roblox_base import LuauRobloxBase
-from .overlay_base import LuauRW_BaseStruct, LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Table, \
+from .overlay_base import LuauRW_TString, LuauRW_lua_State, LuauRW_Udata, LuauRW_Table, \
     LuauRW_UpVal, LuauRW_Closure, LuauRW_GCHeader, LuauRW_TValue, LuauRW_global_State, \
     LuauRW_lua_Page, LuauRW_ProtoECB, GCO_TT_MAPPING, GCO_NAME_MAPPING, LuauRW_BaseStruct
 from .overlay_byfron import LuauRWB_TString, LuauRWB_lua_State, LuauRWB_Udata, LuauRWB_Table, \
@@ -258,7 +259,8 @@ class LuauRobloxAnalysis(Analysis):
     def is_sift_results_loaded(self) -> bool:
         return self.sift_results_loaded
 
-    def scan_lua_pages_gco(self, add_obj=False, scan_entire_block=False, do_sanity_check=True, max_size=DEFAULT_MAX_SIZE) -> [
+    def scan_lua_pages_gco(self, add_obj=False, scan_entire_block=False, do_sanity_check=True,
+                           max_size=DEFAULT_MAX_SIZE) -> [
         LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata |
         LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
         lpages = self.lua_pages.get_pages()
@@ -282,7 +284,8 @@ class LuauRobloxAnalysis(Analysis):
             lpage_start = lpage.addr
             lpage_end = lpage.addr + 24 + lpage.pageSize
             checked.append([lpage_start, lpage_end])
-            r = self.scan_lua_page_gco(lpage=lpage, add_obj=add_obj, scan_entire_block=scan_entire_block, do_sanity_check=do_sanity_check)
+            r = self.scan_lua_page_gco(lpage=lpage, add_obj=add_obj, scan_entire_block=scan_entire_block,
+                                       do_sanity_check=do_sanity_check)
             if len(r) > 0:
                 self.log.debug("Found {} new objects in lua_Page @ 0x{:08x} ".format(len(r), lpage.addr))
                 objs = objs + r
@@ -903,8 +906,7 @@ class LuauRobloxAnalysis(Analysis):
     def get_memrange(self, vaddr) -> MemRange:
         return self.mem_ranges.get_memrange_from_vaddr(vaddr)
 
-    def get_objects_in_section(self, vaddr) -> list[
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata | LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
+    def get_objects_in_section(self, vaddr) -> list[LuauSifterResult]:
         results = []
         mr = self.get_memrange(vaddr)
         if mr is None:
@@ -916,8 +918,7 @@ class LuauRobloxAnalysis(Analysis):
                 results.append(v)
         return results
 
-    def get_pot_objects_in_section(self, vaddr) -> list[
-        LuauRW_Table | LuauRW_ProtoECB | LuauRW_TString | LuauRW_Closure | LuauRW_UpVal | LuauRW_lua_State | LuauRW_Udata | LuauRWB_Table | LuauRWB_ProtoECB | LuauRWB_TString | LuauRWB_Closure | LuauRWB_UpVal | LuauRWB_lua_State | LuauRWB_Udata]:
+    def get_pot_objects_in_section(self, vaddr) -> list[LuauSifterResult]:
         results = []
         mr = self.get_memrange(vaddr)
         if mr is None:
@@ -1391,7 +1392,8 @@ class LuauRobloxAnalysis(Analysis):
         offset = lua_page.freeNext + lua_page.get_offset('data') + lua_page.blockSize
         return lua_page.addr + offset
 
-    def scan_lua_pages_tvalue(self, add_obj=False, num_threads=None, pot_gco=None, pot_tval=None, pot_tt=None, do_sanity_check=True, max_size=DEFAULT_MAX_SIZE):
+    def scan_lua_pages_tvalue(self, add_obj=False, num_threads=None, pot_gco=None, pot_tval=None, pot_tt=None,
+                              do_sanity_check=True, max_size=DEFAULT_MAX_SIZE):
         lua_pages = self.lua_pages.get_pages()
         pot_gco = {} if pot_gco is None else pot_gco
         pot_tval = {} if pot_tval is None else pot_tval
@@ -1410,7 +1412,8 @@ class LuauRobloxAnalysis(Analysis):
                 self.log.debug("Processing {} of {} lua_Pages ".format(cnt, num_lps))
                 t = Thread(target=self.scan_lua_page_tvalue,
                            args=(lp,),
-                           kwargs={'pot_gco': pot_gco, 'pot_tval': pot_tval, 'pot_tt': pot_tt, 'add_obj': add_obj, 'do_sanity_check': do_sanity_check})
+                           kwargs={'pot_gco': pot_gco, 'pot_tval': pot_tval, 'pot_tt': pot_tt, 'add_obj': add_obj,
+                                   'do_sanity_check': do_sanity_check})
                 t.start()
                 active_threads.append(t)
                 active_threads = [i for i in active_threads if i.is_alive()]
@@ -1760,7 +1763,8 @@ class LuauRobloxAnalysis(Analysis):
         return self.state_association
 
     @classmethod
-    def init_from(cls, base_directory, bin_name, load_pointers=False, scan=False, byfron_analysis=True, gch_field_order=None, tstring_len_calc=None):
+    def init_from(cls, base_directory, bin_name, load_pointers=False, scan=False, byfron_analysis=True,
+                  gch_field_order=None, tstring_len_calc=None):
         from overlay_prototyping.luau_roblox import consts
         reset_global_deps(base_directory)
         dmp_file = DUMP_FMT.format(**{"base_dir": consts.BINS_DIR, 'bin_name': bin_name, "dmp_ext": consts.DUMP_EXT})
