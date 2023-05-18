@@ -3,24 +3,51 @@ import struct
 from ctypes import *
 
 from .consts import *
-from ..base import BaseException
 
-from .. transmute.base_le_structs import Transmute_BaseLES
-from .. transmute.base_le_union import Transmute_BaseLEU
-
+from ..transmute.base_le_structs import Transmute_BaseLES
+from ..transmute.base_le_union import Transmute_BaseLEU
 
 
 class LuauRW_GCHeader(Transmute_BaseLES):
     _gco_ = True
     _has_sanity_check_ = True
     __field_def__ = {
-        "tt": {"type": "c_uint8"},
-        "marked": {"type": "c_uint8"},
-        "memcat": {"type": "c_uint8"},
-        "gch_padding": {"type": "c_uint8"},
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
     }
     _fields_ = Transmute_BaseLES.create_fields(__field_def__)
     _fields_dict_ = Transmute_BaseLES.create_fields_dict(__field_def__)
+    _fields_alias_ = {}
+    # {
+    #     "gch_marked": "gch_field_1",
+    #     "gch_tt": "gch_field_0",
+    #     "gch_memcat": "gch_field_2",
+    #     "gch_padding": "gch_field_3"
+    # }
+
+    @classmethod
+    def update_alias_by_ordered_list(cls, alias_fields=None, ordered_fields=None):
+        af = alias_fields if alias_fields else GCH_FIELD_DEFAULT_ORDER
+        of = ordered_fields if ordered_fields else GCH_ORDERED_FIELDS
+        return super(LuauRW_GCHeader, cls).update_alias_by_ordered_list(af, of)
+
+    @property
+    def tt(self):
+        return self.unalias_field('tt')
+
+    @property
+    def marked(self):
+        return self.unalias_field('gch_marked')
+
+    @property
+    def memcat(self):
+        return self.unalias_field('gch_memcat')
+
+    @property
+    def gch_padding(self):
+        return self.unalias_field('gch_padding')
 
     def __init__(self, **kargs):
         super(LuauRW_GCHeader, self).__init__(**kargs)
@@ -44,6 +71,7 @@ class LuauRW_GCHeader(Transmute_BaseLES):
     def sanity_check(self):
         return self.tt in VALID_OBJ_TYPES and self.mark in VALID_MARKS and self.gch_padding == 0
 
+
 class LuauRW_BaseStruct(Transmute_BaseLES):
     _OVERLAY_TYPE_ = 'LuauRW'
     _fields_ = []
@@ -55,6 +83,37 @@ class LuauRW_BaseStruct(Transmute_BaseLES):
     _init_required_ = True
     _gc_header_cls_ = LuauRW_GCHeader
 
+    _fields_alias = {}
+
+    # {
+    #     "gch_marked": "gch_field_1",
+    #     "gch_tt": "gch_field_0",
+    #     "gch_memcat": "gch_field_2",
+    #     "gch_padding": "gch_field_3"
+    # }
+
+    @classmethod
+    def update_alias_by_ordered_list(cls, alias_fields=None, ordered_fields=None):
+        af = alias_fields if alias_fields else GCH_FIELD_DEFAULT_ORDER
+        of = ordered_fields if ordered_fields else GCH_ORDERED_FIELDS
+        return super(LuauRW_BaseStruct, cls).update_alias_by_ordered_list(af, of)
+
+    @property
+    def tt(self):
+        return self.unalias_field('gch_tt')
+
+    @property
+    def marked(self):
+        return self.unalias_field('gch_marked')
+
+    @property
+    def memcat(self):
+        return self.unalias_field('gch_memcat')
+
+    @property
+    def gch_padding(self):
+        return self.unalias_field('gch_padding')
+
     @classmethod
     def create_fields(cls, json_fields):
         return [(k, eval(v['type']), v['bits']) if 'bits' in v else (k, eval(v['type'])) for k, v in
@@ -64,6 +123,7 @@ class LuauRW_BaseStruct(Transmute_BaseLES):
     def create_fields_dict(cls, json_fields):
         return dict((k, eval(v['type'])) if 'bits' in v else (k, eval(v['type'])) for k, v in
                     json_fields.items())
+
     def __init__(self, **kargs):
         super(LuauRW_BaseStruct, self).__init__(**kargs)
         # buf = kargs.get('buf', None)
@@ -71,10 +131,6 @@ class LuauRW_BaseStruct(Transmute_BaseLES):
         #     fit = min(len(buf), sizeof(self))
         #     memmove(addressof(self), buf, fit)
         # self.initialize_with_kargs(**kargs)
-
-    @property
-    def expected_tt(self):
-        return None
 
     def get_gch(self):
         fld = None
@@ -89,7 +145,7 @@ class LuauRW_BaseStruct(Transmute_BaseLES):
         else:
             for x in self._fields_:
                 name, fld = x[:2]
-                if fld_type.__name__.find('LuauRW_GCHeader') > -1:
+                if fld.__name__.find('LuauRW_GCHeader') > -1:
                     fld = getattr(self, name)
                     break
         setattr(self, '_cached_gch', fld)
@@ -113,7 +169,7 @@ class LuauRW_BaseStruct(Transmute_BaseLES):
 
     @property
     def expected_tt(self):
-        return self._tt_
+        return getattr(self, '_tt_', None)
 
     def valid_type(self, type_enum):
         fld = self.get_gch()
@@ -215,7 +271,6 @@ class LuauRW_BaseUnion(Transmute_BaseLEU):
         #
         # self.initialize_with_kargs(**kargs)
 
-
     def get_gch(self):
         fld = None
         if not self._gco_ or self._gc_header_cls_ is None:
@@ -287,16 +342,15 @@ class LuauRW_BaseUnion(Transmute_BaseLEU):
         return fld is not None and fld.tt in {TNUMBER, TBOOLEAN, TVECTOR, TNIL}
 
 
-
 class LuauRW_TString(LuauRW_BaseStruct):
     _gco_ = True
     _has_sanity_check_ = True
     _tt_ = TSTRING
     __field_def__ = {
-        "tt": {"type": "c_uint8"},
-        "marked": {"type": "c_uint8"},
-        "memcat": {"type": "c_uint8"},
-        "gch_padding": {"type": "c_uint8"},
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
         "atom": {"type": "c_uint16"},
         "next": {"type": "c_uint32"},
         "hash": {"type": "c_uint32"},
@@ -308,6 +362,7 @@ class LuauRW_TString(LuauRW_BaseStruct):
     }
     _fields_ = LuauRW_BaseStruct.create_fields(__field_def__)
     _fields_dict_ = LuauRW_BaseStruct.create_fields_dict(__field_def__)
+    _calc_str_len_ = None
 
     def has_data(self):
         return self.has_value()
@@ -324,7 +379,7 @@ class LuauRW_TString(LuauRW_BaseStruct):
         return f
 
     def get_dump(self, word_sz=None, addr=0):
-        r, flat = super(LuauRW_TString, self).get_dump( word_sz=None)
+        r, flat = super(LuauRW_TString, self).get_dump(word_sz=None)
 
         addr = self.addr if self.addr is not None and self.addr > 0 else addr
         # addr = getattr(self, 'addr') if hasattr(self, 'addr') else 0
@@ -332,7 +387,7 @@ class LuauRW_TString(LuauRW_BaseStruct):
         addr = addr + vo if vo is not None else addr
         v = self.get_value()
         if v is not None:
-            x = {"name": "data", "value":v[:80], "addr": addr, 'type': 'char[]', 'offset': vo,
+            x = {"name": "data", "value": v[:80], "addr": addr, 'type': 'char[]', 'offset': vo,
                  "fmt": "{}", "is_array": False}
             r[x['addr']] = x
             flat.append(x)
@@ -346,7 +401,7 @@ class LuauRW_TString(LuauRW_BaseStruct):
 
     def do_fixups(self, **kargs):
         sz = sizeof(self)
-        str_len = self.end - (self.addr + sz) + self.word_sz
+        str_len = self.calc_str_len()
         # if str_len % self.word_sz == 0:
         #     str_len += self.word_sz
         buf = kargs.get('buf', None)
@@ -354,7 +409,7 @@ class LuauRW_TString(LuauRW_BaseStruct):
         analysis = getattr(self, 'analysis', None)
         value = None
         if analysis is not None and str_len > 0:
-            data = analysis.read_vaddr(self.addr+sz, str_len)
+            data = analysis.read_vaddr(self.addr + sz, str_len)
             value = "".join([chr(x) for x in data])
         elif buf and len(buf) > sz:
             value = "".join([chr(x) for x in buf[sz:sz + str_len]])
@@ -394,6 +449,16 @@ class LuauRW_TString(LuauRW_BaseStruct):
             return self.lua_hash_string(value)
         return None
 
+    def calc_str_len(self):
+        if self._calc_str_len_ == 'basic':
+            return self.end - (self.addr + ctypes.sizeof(self)) + self.word_sz
+        if self._calc_str_len_ == 'add_end_addr_value':
+            return self.end + self.addr_of('end') & 0xffffffff
+        return self.end - (self.addr + ctypes.sizeof(self)) + self.word_sz
+
+    @classmethod
+    def set_calc_strlen(cls, approach='basic'):
+        cls._calc_str_len_ = approach
 
 class LuauRW_ForceAlignment(LuauRW_BaseUnion):
     _OVERLAY_TYPE_ = 'LuauRW'
@@ -425,10 +490,14 @@ class LuauRW_TValue(LuauRW_BaseStruct):
     __field_def__ = {
         "value": {"type": "LuauRW_Value"},
         "extra": {"type": "c_uint32*1"},
-        "tt": {"type": "c_uint32"},
+        "tvalue_tt": {"type": "c_uint32"},
     }
     _fields_ = LuauRW_BaseStruct.create_fields(__field_def__)
     _fields_dict_ = LuauRW_BaseStruct.create_fields_dict(__field_def__)
+
+    @property
+    def tt(self):
+        return self.unalias_field("tvalue_tt")
 
 
 class LuauRW_TableArrayBoundary(LuauRW_BaseUnion):
@@ -445,10 +514,10 @@ class LuauRW_Table(LuauRW_BaseStruct):
     _has_sanity_check_ = True
     _tt_ = TTABLE
     __field_def__ = {
-        "tt": {"type": "c_uint8"},
-        "marked": {"type": "c_uint8"},
-        "memcat": {"type": "c_uint8"},
-        "gch_padding": {"type": "c_uint8"},
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
 
         "tmcache": {"type": "c_uint8"},
         "readonly": {"type": "c_uint8"},
@@ -480,10 +549,11 @@ class LuauRW_Table(LuauRW_BaseStruct):
         return self.is_valid_gc_header()
 
     def get_next_gco(self):
-        return self.addr + self.get_total_size()-self.word_sz
+        return self.addr + self.get_total_size() - self.word_sz
 
     def get_tvalue_address(self, index):
         return self.addr + self.get_offset('array') + index * ctypes.sizeof(LuauRW_TValue)
+
 
 class LuauRW_LocVar(LuauRW_BaseStruct):
     __field_def__ = {
@@ -502,10 +572,10 @@ class LuauRW_Udata(LuauRW_BaseStruct):
     _has_sanity_check_ = True
     _tt_ = TUSERDATA
     __field_def__ = {
-        "tt": {"type": "c_uint8"},
-        "marked": {"type": "c_uint8"},
-        "memcat": {"type": "c_uint8"},
-        "gch_padding": {"type": "c_uint8"},
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
         "tag": {"type": "c_uint8"},
         "len": {"type": "c_int32"},
         "metatable": {"type": "c_uint32"},
@@ -553,10 +623,10 @@ class LuauRW_UpVal(LuauRW_BaseStruct):
     _has_sanity_check_ = True
     _tt_ = TUPVAL
     __field_def__ = {
-        "tt": {"type": "c_uint8"},
-        "marked": {"type": "c_uint8"},
-        "memcat": {"type": "c_uint8"},
-        "gch_padding": {"type": "c_uint8"},
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
 
         "markedopen": {"type": "c_int8"},
         "v": {"type": "c_uint32"},
@@ -577,15 +647,16 @@ class LuauRW_UpVal(LuauRW_BaseStruct):
     def get_next_gco(self):
         return self.addr + self.get_total_size()
 
+
 class LuauRW_Proto(LuauRW_BaseStruct):
     _gco_ = True
     _has_sanity_check_ = True
     _tt_ = TPROTO
     __field_def__ = {
-        "tt": {"type": "c_uint8"},
-        "marked": {"type": "c_uint8"},
-        "memcat": {"type": "c_uint8"},
-        "gch_padding": {"type": "c_uint8"},
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
 
         "k": {"type": "c_uint32"},
         "code": {"type": "c_uint32"},
@@ -637,15 +708,16 @@ class LuauRW_Proto(LuauRW_BaseStruct):
     def get_next_gco(self):
         return self.addr + self.get_total_size()
 
+
 class LuauRW_ProtoECB(LuauRW_BaseStruct):
     _gco_ = True
     _has_sanity_check_ = True
     _tt_ = TPROTO
     __field_def__ = {
-        "tt": {"type": "c_uint8"},
-        "marked": {"type": "c_uint8"},
-        "memcat": {"type": "c_uint8"},
-        "gch_padding": {"type": "c_uint8"},
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
 
         "k": {"type": "c_uint32"},
         "code": {"type": "c_uint32"},
@@ -734,10 +806,10 @@ class LuauRW_Closure(LuauRW_BaseStruct):
     _has_sanity_check_ = True
     _tt_ = TCLOSURE
     __field_def__ = {
-        "tt": {"type": "c_uint8"},
-        "marked": {"type": "c_uint8"},
-        "memcat": {"type": "c_uint8"},
-        "gch_padding": {"type": "c_uint8"},
+        "gch_field_0": {"type": "c_uint8"},
+        "gch_field_1": {"type": "c_uint8"},
+        "gch_field_2": {"type": "c_uint8"},
+        "gch_field_3": {"type": "c_uint8"},
 
         "isC": {"type": "c_uint8"},
         "nupvalues": {"type": "c_uint8"},
@@ -773,15 +845,24 @@ class LuauRW_Closure(LuauRW_BaseStruct):
 
     def get_next_gco(self):
         return self.addr + self.get_total_size()
+
+
 class LuauRW_TKey(LuauRW_BaseStruct):
     __field_def__ = {
         "value": {"type": "LuauRW_Value"},
         "extra": {"type": "c_uint32"},
-        "tt": {"type": "c_uint32", "bits": 4},
+        "tkey_tt": {"type": "c_uint32", "bits": 4},
         "next": {"type": "c_uint32", "bits": 28},
     }
     _fields_ = LuauRW_BaseStruct.create_fields(__field_def__)
     _fields_dict_ = LuauRW_BaseStruct.create_fields_dict(__field_def__)
+    _fields_alias = {
+        "tkey_tt": "tkey_tt"
+    }
+
+    @property
+    def tt(self):
+        return self.unalias_field("tvalue_tt")
 
 
 class LuauRW_LuaNode(LuauRW_BaseStruct):
@@ -903,10 +984,10 @@ class LuauRW_lua_State(LuauRW_BaseStruct):
     _has_sanity_check_ = True
     _tt_ = TTHREAD
     __field_def__ = {
-        "tt": {"type": "c_uint8"},
-        "marked": {"type": "c_uint8"},
-        "memcat": {"type": "c_uint8"},
-        "gch_padding": {"type": "c_uint8"},
+        "ch_field_0": {"type": "c_uint8"},
+        "ch_field_1": {"type": "c_uint8"},
+        "ch_field_2": {"type": "c_uint8"},
+        "ch_field_3": {"type": "c_uint8"},
 
         "status": {"type": "c_uint8"},
         "activememcat": {"type": "c_uint8"},
@@ -915,7 +996,7 @@ class LuauRW_lua_State(LuauRW_BaseStruct):
 
         "top": {"type": "c_uint32"},
         "base": {"type": "c_uint32"},
-        "global": {"type": "c_uint32"},
+        "global_State": {"type": "c_uint32"},
         "ci": {"type": "c_uint32"},
         "stack_last": {"type": "c_uint32"},
         "stack": {"type": "c_uint32"},
@@ -966,8 +1047,11 @@ class LuauRW_lua_State(LuauRW_BaseStruct):
 
     def sanity_check(self):
         return self.is_valid_gc_header()
+
     def get_next_gco(self):
         return self.addr + self.get_total_size()
+
+
 class LuauRW_global_State(LuauRW_BaseStruct):
     __field_def__ = {
         "strt": {"type": "LuauRW_stringtable"},
@@ -1063,7 +1147,6 @@ class LuauRW_GCObjectUnion(LuauRW_BaseUnion):
             if obj.is_valid_gc_header():
                 return True
         return False
-
 
 
 class LuauRW_lua_Page(LuauRW_BaseStruct):
@@ -1355,7 +1438,7 @@ class LuauRW_Constant(LuauRW_BaseStruct):
         return f
 
     def get_dump(self, addr=None, offset=0, word_sz=None):
-        r, flat = super(LuauRW_Constant, self).get_dump( word_sz=None)
+        r, flat = super(LuauRW_Constant, self).get_dump(word_sz=None)
         vo = self.get_value_offset()
         addr = getattr(self, 'addr') if hasattr(self, 'addr') else 0
         addr = addr + vo if vo is not None else addr
@@ -1392,4 +1475,24 @@ VALID_OBJ_CLS_MAPPING = {
     TTHREAD: LuauRW_lua_State,
     TPROTO: LuauRW_Proto,
     TUPVAL: LuauRW_UpVal,
+}
+
+GCO_TT_MAPPING = {
+    TSTRING: LuauRW_TString,
+    TUPVAL: LuauRW_UpVal,
+    TTHREAD: LuauRW_lua_State,
+    TCLOSURE: LuauRW_Closure,
+    TTABLE: LuauRW_Table,
+    TPROTO: LuauRW_ProtoECB,
+    TUSERDATA: LuauRW_Udata
+}
+
+GCO_NAME_MAPPING = {
+    TSTRING: LuauRW_TString,
+    TUPVAL: LuauRW_UpVal,
+    TTHREAD: LuauRW_lua_State,
+    TCLOSURE: LuauRW_Closure,
+    TTABLE: LuauRW_Table,
+    TPROTO: LuauRW_ProtoECB,
+    TUSERDATA: LuauRW_Udata,
 }

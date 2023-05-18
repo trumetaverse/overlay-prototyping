@@ -1,9 +1,33 @@
-
+import os
 UNINT_MAX = 4294967295
 LUA_MINSTACK = 20
 MAXSSIZE = (1 << 30)
 
-DEFAULT_MAX_SIZE = MAXSSIZE #536870912 # 512 MB
+
+
+UNSCRAMBLE_GCH_FIELD_0 = 'gch_field_0'
+UNSCRAMBLE_GCH_FIELD_1 = 'gch_field_1'
+UNSCRAMBLE_GCH_FIELD_2 = 'gch_field_2'
+UNSCRAMBLE_GCH_FIELD_3 = "gch_field_3"
+
+GCH_FIELD_DEFAULT_ORDER = ['tt', 'marked', 'memcat', 'gch_padding']
+BGCH_FIELD_DEFAULT_ORDER = ['marked', 'tt', 'memcat', 'gch_padding']
+GCH_ORDERED_FIELDS = [UNSCRAMBLE_GCH_FIELD_0, UNSCRAMBLE_GCH_FIELD_1, UNSCRAMBLE_GCH_FIELD_2, UNSCRAMBLE_GCH_FIELD_3]
+
+
+
+UNSCRAMBLE_FIELD_NAME_TVALUE_TT = "tvalue_field_2"
+UNSCRAMBLE_FIELD_NAME_TKEY_TT = "tkey_field_2"
+
+FIELD_NAME_GCH_MARKED = '_field_name_gch_marked'
+FIELD_NAME_GCH_TT = '_field_name_gch_tt'
+FIELD_NAME_GCH_MEMCAT = '_field_name_gch_memcat'
+FIELD_NAME_GCH_PADDING = "_field_name_gch_gchpadding"
+FIELD_NAME_TVALUE_TT = "_field_name_tvalue_tt"
+FIELD_NAME_TKEY_TT = "_field_name_tkey_tt"
+
+
+DEFAULT_MAX_SIZE = MAXSSIZE/2 #536870912 # 512 MB
 LUAR_ROBLOX_EVENT_NAMES = [
     "__index",
     "__newindex",
@@ -271,7 +295,7 @@ LUA_TAG_TYPES = {
     TVECTOR: "vector",
     TSTRING: "string",
     TTABLE: "table",
-    TCLOSURE: "function",
+    TCLOSURE: "closure",
     TUSERDATA: "userdata",
     TTHREAD: "thread",
 }
@@ -444,3 +468,30 @@ COMPILER_TYPES = [
 ]
 COMPILER_TYPES_MAPPING = {k:v for k, v in enumerate(COMPILER_TYPES)}
 MERGE (COMPILER_TYPES_MAPPING, {v:k for k, v in enumerate(COMPILER_TYPES)})
+
+BASE_DIR = "E:/dumps/2023-04-28/"
+BINS_DIR = os.path.join(BASE_DIR, 'bins')
+MEMS_DIR = os.path.join(BASE_DIR, 'mem')
+SEARCHES_DIR = os.path.join(BASE_DIR, 'searches')
+DUMP_EXT = 'DMP'
+
+DUMP_FMT = "{base_dir}/{bin_name}.{dmp_ext}"
+LUAPAGE_POINTER_FMT = "{base_dir}/{bin_name}/luapage_comments.json"
+POINTERS_FMT = "{base_dir}/{bin_name}/pointer_comments.json"
+MEMORY_INFO_FMT = "{base_dir}/{bin_name}.json"
+
+IDENTIFIED_OBJECTS_PARSE_FMT = "{base_dir}/{bin_name}/memory_ranges_roblox_assets.json"
+IDENTIFIED_OBJECTS_FULL_FMT = "{base_dir}/{bin_name}/full_dump_roblox_assets.json"
+
+SAVED_OBJECTS_FILE = "{base_dir}/{bin_name}/gcos_and_structs.json"
+FULL_EXTRACTED_GAME_ASSETS_BASE = "{base_dir}/{bin_name}/extracted_assets/full/"
+PARSE_EXTRACTED_GAME_ASSETS_BASE = "{base_dir}/{bin_name}/extracted_assets/parse/"
+
+def reset_global_deps(base_dir):
+    global BASE_DIR, BINS_DIR, MEMS_DIR, SEARCHES_DIR
+    BASE_DIR = base_dir
+    BINS_DIR = os.path.join(BASE_DIR, 'bins')
+    MEMS_DIR = os.path.join(BASE_DIR, 'mem')
+    SEARCHES_DIR = os.path.join(BASE_DIR, 'searches')
+
+
