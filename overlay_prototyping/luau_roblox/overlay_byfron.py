@@ -479,6 +479,8 @@ class LuauRWB_TString(LuauRWB_BaseStruct):
         return None
 
     def calc_str_len(self):
+        if self._calc_str_len_ == 'absolute':
+            return self.end
         if self._calc_str_len_ == 'basic':
             return self.end - (self.addr + ctypes.sizeof(self)) + self.word_sz
         if self._calc_str_len_ == 'add_end_addr_value':
@@ -1097,7 +1099,7 @@ class LuauRWB_global_State(LuauRWB_BaseStruct):
         "tmname": {"type": "c_uint64 * TMS_CNT"},
         "pseudotemp": {"type": "LuauRWB_TValue"},
 
-        "registry": {"type": "TValue"},
+        "registry": {"type": "LuauRWB_TValue"},
         "registryfree": {"type": "c_int32"},
 
         "errorjmp": {"type": "c_uint64"},
